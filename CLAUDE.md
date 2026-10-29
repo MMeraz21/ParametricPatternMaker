@@ -22,6 +22,9 @@ There is no linter yet. CI (`.github/workflows/ci.yml`) runs typecheck and tests
   (`ipcMain` is undefined). Launch with `env -u ELECTRON_RUN_AS_NODE npm run dev`.
 - If dev fails with "Electron uninstall", the binary didn't download: `node node_modules/electron/install.js`.
 - The user normally runs the app in their own terminal; Claude runs tests, typecheck and builds.
+- To prove a UI change in the real app, use the `verify-pattern-maker` skill
+  (`.agents/skills/verify-pattern-maker/`): `node .agents/skills/verify-pattern-maker/scripts/run.mjs doctor`.
+  When adding a user-facing feature, add its feature file and journey there too.
 
 ## Architecture
 

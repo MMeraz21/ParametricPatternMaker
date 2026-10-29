@@ -10,8 +10,8 @@ How we work on this project with Claude Code and the installed skills.
 | Look at the window and judge whether pieces look right. | Writing code and tests, git, PRs, CI |
 | Review PR diffs on GitHub. | Fixing until tests and typecheck pass. |
 
-Claude can't reliably see the Electron window, so visual checks are yours until the
-verification skill exists (see Setup).
+Claude checks the UI with the `verify-pattern-maker` skill (screenshots, ARIA snapshots, checks).
+Your eyes are still the judge of whether a pattern looks right.
 
 ## How skills get used
 
@@ -25,8 +25,9 @@ verification skill exists (see Setup).
 1. **`/init`**: create `CLAUDE.md` with project rules (core stays pure, units in mm,
    `env -u ELECTRON_RUN_AS_NODE` when Claude launches the app) and which principles apply to
    `src/core`.
-2. **`/create-verification-skill`**: after milestone 3, once the canvas exists. Gives Claude a
-   way to drive the app and check that pieces render correctly.
+2. **`/create-verification-skill`**: done. Claude drives the built app with the project skill
+   `verify-pattern-maker` (Playwright + Electron) and saves evidence to `verification-artifacts/`.
+   Keep it current with `/maintain-verification-skill` as features land.
 
 ## Per milestone
 
@@ -74,5 +75,4 @@ open a PR
 
 ## Skip for now
 
-`benchmark-checklist`, `make-bot-ui`, `automate-me`, `maintain-verification-skill` (until the
-verification skill exists), `figure-it-out` (PLAN.md already covers it).
+`benchmark-checklist`, `make-bot-ui`, `automate-me`, `figure-it-out` (PLAN.md already covers it).
