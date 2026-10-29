@@ -59,6 +59,11 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    cross-axis references between two points are not cycles.
 4. `graph.ts`: Tarjan SCC gives dependency order plus every cycle (all members and one concrete
    path). Nodes downstream of a failure get `dependency-failed`.
+5. `outline.ts` (internal, called once at the end of `evaluate`): turns resolved points into
+   segment curves with lengths, and pieces into closed, oriented outlines with placed notches. Notch
+   distances are the only other DAG nodes. Closure is checked by point id, not coordinates. All maths
+   is in `geometry.ts`, a kernel with no model imports (arc length, sampling, flattening, area, SVG
+   path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 
 `src/core/fixtures/raglan.ts` is the shared raglan tee fixture used across tests. Extend it as
 milestones add pieces; it is the MVP acceptance test.
