@@ -1,6 +1,7 @@
 import { compileFormula, evaluateExpr, isValidName, referenceKey, type Axis, type Expr, type Reference } from './formula'
 import { topologicalSort } from './graph'
-import type { Id, Pattern, Piece, Segment, SizeName } from './model'
+import type { Id, Pattern, SizeName } from './model'
+import { notchKey, resolveGeometry, type ResolvedPiece, type ResolvedSegment } from './outline'
 
 /** Identifies the pattern item an issue is about, so the UI can point at it. */
 export type ItemRef =
@@ -8,6 +9,9 @@ export type ItemRef =
   | { kind: 'variable'; name: string }
   | { kind: 'point'; id: Id; name: string }
   | { kind: 'pointCoord'; id: Id; name: string; axis: Axis }
+  | { kind: 'segment'; id: Id }
+  | { kind: 'piece'; id: Id; name: string }
+  | { kind: 'notch'; pieceId: Id; id: Id }
 
 export type EvaluationIssue =
   | { kind: 'unknown-size'; size: SizeName; message: string }
@@ -21,7 +25,24 @@ export type EvaluationIssue =
   | { kind: 'cycle'; item: ItemRef; cycle: string[]; message: string }
   | { kind: 'dependency-failed'; item: ItemRef; dependency: string; message: string }
   | { kind: 'not-finite'; item: ItemRef; message: string }
-  | { kind: 'missing-point'; segmentId: Id; pointId: Id; message: string }
+  | { kind: 'missing-point'; item: ItemRef; pointId: Id; message: string }
+  | { kind: 'missing-segment'; item: ItemRef; segmentId: Id; message: string }
+  | { kind: 'outline-empty'; item: ItemRef; message: string }
+  | { kind: 'duplicate-outline-segment'; item: ItemRef; segmentId: Id; message: string }
+  | {
+      kind: 'outline-gap'
+      item: ItemRef
+      /** The edge whose end doesn't meet the next edge's start, and that next edge. */
+      after: Id
+      before: Id
+      endPointId: Id
+      startPointId: Id
+      message: string
+    }
+  | { kind: 'degenerate-outline'; item: ItemRef; message: string }
+  | { kind: 'notch-off-outline'; item: ItemRef; segmentId: Id; message: string }
+  | { kind: 'notch-out-of-range'; item: ItemRef; distance: number; length: number; message: string }
+  | { kind: 'notch-on-degenerate-segment'; item: ItemRef; message: string }
 
 export interface ResolvedPoint {
   id: Id
@@ -35,10 +56,10 @@ export interface ResolvedPattern {
   size: SizeName
   measurements: Record<string, number>
   variables: Record<string, number>
-  /** Keyed by point id. Points with an unresolved coordinate are omitted (see `issues`). */
+  /** Keyed by id. Anything that failed to resolve is omitted and explained in `issues`. */
   points: Record<Id, ResolvedPoint>
-  segments: Segment[]
-  pieces: Piece[]
+  segments: Record<Id, ResolvedSegment>
+  pieces: Record<Id, ResolvedPiece>
   issues: EvaluationIssue[]
 }
 
@@ -75,6 +96,12 @@ function describe(item: ItemRef): string {
       return `point '${item.name}'`
     case 'pointCoord':
       return `${item.name}.${item.axis}`
+    case 'segment':
+      return `segment '${item.id}'`
+    case 'piece':
+      return `piece '${item.name}'`
+    case 'notch':
+      return `notch '${item.id}'`
     default: {
       const _exhaustive: never = item
       return _exhaustive
@@ -152,6 +179,24 @@ export function evaluate(pattern: Pattern, size: SizeName): ResolvedPattern {
         item: { kind: 'pointCoord', id: point.id, name: point.name, axis },
         label: `${point.name}.${axis}`,
         source: point[axis],
+        failed: false
+      })
+    }
+  }
+
+  // Notch distances are formulas too. They are leaves (nothing can reference a notch), so they cannot
+  // form cycles. Duplicate piece or notch ids are reported by resolveGeometry.
+  const notchKeys = new Set<string>()
+  for (const piece of pattern.pieces) {
+    for (const notch of piece.notches) {
+      const key = notchKey(piece.id, notch.id)
+      if (notchKeys.has(key)) continue
+      notchKeys.add(key)
+      formulaNodes.push({
+        key,
+        item: { kind: 'notch', pieceId: piece.id, id: notch.id },
+        label: `notch ${notch.id}`,
+        source: notch.distance,
         failed: false
       })
     }
@@ -264,27 +309,23 @@ export function evaluate(pattern: Pattern, size: SizeName): ResolvedPattern {
     if (x !== undefined && y !== undefined && points[id] === undefined) points[id] = { id, name, x, y }
   }
 
-  for (const segment of pattern.segments) {
-    const pointRefs = segment.kind === 'line' ? [segment.from, segment.to] : [segment.from, segment.c1, segment.c2, segment.to]
-    for (const pointId of pointRefs) {
-      if (!pointIds.has(pointId)) {
-        issues.push({
-          kind: 'missing-point',
-          segmentId: segment.id,
-          pointId,
-          message: `Segment '${segment.id}' refers to missing point '${pointId}'`
-        })
-      }
-    }
+  const pointNames = new Map<Id, string>()
+  for (const { id, name } of pattern.points) if (!pointNames.has(id)) pointNames.set(id, name)
+  const notchDistances = new Map<string, number>()
+  for (const key of notchKeys) {
+    const value = values.get(key)
+    if (value !== undefined) notchDistances.set(key, value)
   }
+  const geometry = resolveGeometry({ pattern, points, pointNames, notchDistances })
+  issues.push(...geometry.issues)
 
   return {
     size,
     measurements: resolvedMeasurements,
     variables,
     points,
-    segments: pattern.segments,
-    pieces: pattern.pieces,
+    segments: geometry.segments,
+    pieces: geometry.pieces,
     issues
   }
 }

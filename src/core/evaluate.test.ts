@@ -183,7 +183,8 @@ describe('evaluate', () => {
       }),
       'S'
     )
-    expect(result.issues).toMatchObject([{ kind: 'missing-point', segmentId: 's', pointId: 'ghost' }])
+    expect(result.issues).toMatchObject([{ kind: 'missing-point', item: { kind: 'segment', id: 's' }, pointId: 'ghost' }])
+    expect(result.segments).toEqual({})
   })
 
   it('does not mutate its input', () => {
