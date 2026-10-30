@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Desktop app for drafting parametric sewing patterns. `PLAN.md` is the source of truth for scope, data
 model and milestones; `workflow.md` describes how we work and which skills to use per milestone.
+`docs/open-questions.md` lists deferred product decisions and their current defaults; add to it
+rather than asking the user to decide things they can't judge yet.
 
 ## Commands
 
