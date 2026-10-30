@@ -62,6 +62,7 @@ function selectionAfter(selection: Selection | null, edit: PatternEdit): Selecti
       return selection && sameItem(selection, edit.item) ? null : selection
     case 'setFormula':
     case 'setMeasurement':
+    case 'setUnits':
       return selection
     default: {
       const _exhaustive: never = edit

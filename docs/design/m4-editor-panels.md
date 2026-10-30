@@ -112,3 +112,15 @@ These are recorded with their defaults in `docs/open-questions.md`:
 - showing a "used by" count;
 - adding and removing sizes, which is M6;
 - reordering rows.
+
+## Addendum: display units
+
+Added at the user's request before merging. There's a header `Units` select, which applies a `setUnits` edit
+(`pattern.units` was already in the schema). `core/units.ts` (`formatLength`, `toMm`) is the single conversion
+point. Tables, variable values and the inspector show the display unit, and typed measurement values are read in
+it. Committing the displayed rounded text unchanged is a no-op, so exact mm values survive a round trip through
+inches.
+
+Formulas stay in mm, because literals can't be classified as lengths or ratios. The `mm`, `cm` and `inch`
+constants let a formula name its unit (`12cm`), through mathjs implicit multiplication. `in` is a parser keyword,
+hence `inch`.

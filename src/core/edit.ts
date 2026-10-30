@@ -1,5 +1,5 @@
 import { isValidName, renameReferences, type Axis } from './formula'
-import type { Id, Measurement, Pattern, Point, SizeName, Variable } from './model'
+import type { DisplayUnits, Id, Measurement, Pattern, Point, SizeName, Variable } from './model'
 
 /**
  * Pattern edits: the one way anything changes a Pattern (panels, inspector, undo and MCP later).
@@ -37,6 +37,7 @@ export type PatternEdit =
   | { readonly kind: 'rename'; readonly item: ItemKey; readonly to: string }
   | { readonly kind: 'setFormula'; readonly owner: FormulaOwner; readonly formula: string }
   | { readonly kind: 'setMeasurement'; readonly name: string; readonly size: SizeName; readonly value: number }
+  | { readonly kind: 'setUnits'; readonly units: DisplayUnits }
 
 /** Why a name can't be used. Messages are ready to show. */
 export type NameProblem = { readonly kind: 'invalid' | 'taken'; readonly message: string }
@@ -141,6 +142,8 @@ export function applyEdit(pattern: Pattern, edit: PatternEdit): Pattern {
       )
       return measurements ? { ...pattern, measurements } : pattern
     }
+    case 'setUnits':
+      return pattern.units === edit.units ? pattern : { ...pattern, units: edit.units }
     default: {
       const _exhaustive: never = edit
       return _exhaustive

@@ -29,6 +29,20 @@ export function App() {
         <h1 className="text-base font-semibold">Parametric Pattern Maker</h1>
         <p className="text-xs text-neutral-500">v{version ?? '…'}</p>
         <p className="ml-auto text-sm text-neutral-600">Size {resolved.size}</p>
+        <label className="flex items-center gap-1 text-sm text-neutral-600">
+          Units
+          <select
+            value={pattern.units}
+            onChange={(e) => {
+              const units = e.target.value
+              if (units === 'cm' || units === 'in') dispatch({ type: 'edit', edit: { kind: 'setUnits', units } })
+            }}
+            className="rounded border border-neutral-300 bg-white px-1 py-0.5"
+          >
+            <option value="cm">cm</option>
+            <option value="in">inches</option>
+          </select>
+        </label>
       </header>
       <main className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -45,7 +59,7 @@ export function App() {
           </div>
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto border-l border-neutral-200 bg-white">
-          <Inspector inspection={inspection} onEdit={(edit) => dispatch({ type: 'edit', edit })} />
+          <Inspector inspection={inspection} units={pattern.units} onEdit={(edit) => dispatch({ type: 'edit', edit })} />
           <IssuesPanel issues={resolved.issues} onSelect={(next) => dispatch({ type: 'select', selection: next })} />
         </aside>
       </main>

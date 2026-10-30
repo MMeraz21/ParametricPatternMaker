@@ -68,8 +68,8 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 
 Pattern changes go through `applyEdit(pattern, edit)` in `src/core/edit.ts`. It is pure, and a no-op
-or refused edit returns the same reference. There are five edits (`add`, `remove`, `rename`,
-`setFormula`, `setMeasurement`), and `checkName` is the one name rule. `rename` rewrites references
+or refused edit returns the same reference. There are six edits (`add`, `remove`, `rename`,
+`setFormula`, `setMeasurement`, `setUnits`), and `checkName` is the one name rule. `rename` rewrites references
 with `renameReferences` in `formula.ts`, which keeps the user's text.
 
 ### Renderer
@@ -88,7 +88,9 @@ milestones add pieces; it is the MVP acceptance test.
 
 ## Conventions
 
-- Lengths are millimetres internally; `units` on a pattern is display only. y points down (SVG).
+- Lengths are millimetres internally; `units` on a pattern ('cm' | 'in') is display only. Format with
+  `formatLength` and read typed values with `toMm` (`core/units.ts`). Bare numbers in formulas are mm;
+  formulas can say `12cm` or `2inch` (`mm`, `cm`, `inch` are constants). y points down (SVG).
 - Bezier control points are formulas relative to their anchors, so curves keep shape when graded.
 - Strict TS with `noUncheckedIndexedAccess`. In core: no `any`, avoid `as` and `!`; model variants
   as discriminated unions and end switches with `const _exhaustive: never = x`.

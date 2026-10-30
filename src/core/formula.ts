@@ -52,7 +52,11 @@ type FunctionName = keyof typeof FUNCTIONS
 
 const CONSTANTS = {
   pi: Math.PI,
-  tau: Math.PI * 2
+  tau: Math.PI * 2,
+  // Length units, in mm: `10cm` or `4inch` (implicit multiplication). `in` is a parser keyword.
+  mm: 1,
+  cm: 10,
+  inch: 25.4
 } satisfies Record<string, number>
 type ConstantName = keyof typeof CONSTANTS
 

@@ -1,5 +1,8 @@
 import {
+  UNIT_LABEL,
   checkName,
+  formatLength,
+  toMm,
   newItem,
   sameItem,
   type EvaluationIssue,
@@ -71,8 +74,6 @@ const column = (id: string, header: string, options: Partial<Pick<Column, 'numer
   emphasis: options.emphasis ?? false
 })
 
-const formatMm = (value: number): string => String(Math.round(value * 10) / 10)
-
 const issuesAbout = (resolved: ResolvedPattern, matches: (item: ItemRef) => boolean): EvaluationIssue[] =>
   resolved.issues.filter((issue) => issue.kind !== 'unknown-size' && matches(issue.item))
 
@@ -104,22 +105,25 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
   const rows = pattern.measurements.map((measurement): Row => {
     const key: ItemKey = { kind: 'measurement', name: measurement.name }
     const issues = issuesAbout(resolved, (item) => item.kind === 'measurement' && item.name === measurement.name)
-    const valueCells = pattern.sizes.map(
-      (size): TextCell => ({
+    const valueCells = pattern.sizes.map((size): TextCell => {
+      const mm = measurement.values[size]
+      const text = mm === undefined ? '' : formatLength(mm, pattern.units)
+      return {
         kind: 'text',
         columnId: size,
         label: `${measurement.name} ${size}`,
-        text: measurement.values[size] === undefined ? '' : String(measurement.values[size]),
+        text,
         // missing-measurement-value is reported for the active size only.
         issues: size === pattern.activeSize ? issues.filter((issue) => issue.kind === 'missing-measurement-value') : [],
         commit: (draft) => {
+          // Typed in display units. Committing the displayed (rounded) text unchanged keeps the exact mm.
+          if (draft.trim() === text) return { ok: true, edit: null }
           const value = Number(draft.trim())
           if (draft.trim() === '' || !Number.isFinite(value)) return { ok: false, message: `'${draft}' is not a number` }
-          if (value === measurement.values[size]) return { ok: true, edit: null }
-          return { ok: true, edit: { kind: 'setMeasurement', name: measurement.name, size, value } }
+          return { ok: true, edit: { kind: 'setMeasurement', name: measurement.name, size, value: toMm(value, pattern.units) } }
         }
-      })
-    )
+      }
+    })
     return {
       key,
       name: measurement.name,
@@ -128,11 +132,11 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
       remove: { kind: 'remove', item: key }
     }
   })
-  return { kind: 'measurement', title: 'Measurements (mm)', columns, rows, add: { label: 'Add measurement', edit: { kind: 'add', item: newItem(pattern, 'measurement') } } }
+  return { kind: 'measurement', title: `Measurements (${UNIT_LABEL[pattern.units]})`, columns, rows, add: { label: 'Add measurement', edit: { kind: 'add', item: newItem(pattern, 'measurement') } } }
 }
 
 export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
-  const columns = [column('name', 'Name'), column('formula', 'Formula'), column('value', 'Value (mm)', { numeric: true })]
+  const columns = [column('name', 'Name'), column('formula', 'Formula'), column('value', `Value (${UNIT_LABEL[pattern.units]})`, { numeric: true })]
   const rows = pattern.variables.map((variable): Row => {
     const key: ItemKey = { kind: 'variable', name: variable.name }
     const issues = issuesAbout(resolved, (item) => item.kind === 'variable' && item.name === variable.name)
@@ -154,7 +158,7 @@ export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selec
               ? { ok: true, edit: null }
               : { ok: true, edit: { kind: 'setFormula', owner: { kind: 'variable', name: variable.name }, formula: draft } }
         },
-        { kind: 'readout', columnId: 'value', label: `${variable.name} value`, text: value === undefined ? null : formatMm(value) }
+        { kind: 'readout', columnId: 'value', label: `${variable.name} value`, text: value === undefined ? null : formatLength(value, pattern.units) }
       ],
       remove: { kind: 'remove', item: key }
     }

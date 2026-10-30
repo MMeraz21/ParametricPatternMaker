@@ -30,15 +30,26 @@ describe('measurementTable', () => {
       ['XXL', false]
     ])
     expect(table.rows.map((r) => r.name)).toEqual(['chest', 'neck', 'shoulder_width', 'back_length', 'armhole_depth'])
-    expect(text(table, 'chest', 'L')).toMatchObject({ label: 'chest L', text: '1080' })
+    expect(table.title).toBe('Measurements (cm)')
+    expect(text(table, 'chest', 'L')).toMatchObject({ label: 'chest L', text: '108' })
   })
 
-  it('commits numbers as setMeasurement and rejects anything else', () => {
+  it('commits numbers in display units as setMeasurement in mm, and rejects anything else', () => {
     const chestM = text(table, 'chest', 'M')
-    expect(chestM.commit('1040')).toEqual({ ok: true, edit: { kind: 'setMeasurement', name: 'chest', size: 'M', value: 1040 } })
-    expect(chestM.commit(' 1000 ')).toEqual({ ok: true, edit: null })
+    expect(chestM.commit('104')).toEqual({ ok: true, edit: { kind: 'setMeasurement', name: 'chest', size: 'M', value: 1040 } })
+    expect(chestM.commit(' 100 ')).toEqual({ ok: true, edit: null })
     expect(chestM.commit('wide')).toEqual({ ok: false, message: "'wide' is not a number" })
     expect(chestM.commit('')).toMatchObject({ ok: false })
+  })
+
+  it('shows and reads inches, keeping exact mm when the rounded text is committed unchanged', () => {
+    const inches: Pattern = { ...raglanTee, units: 'in' }
+    const t = measurementTable(inches, evaluate(inches, 'M'), null)
+    expect(t.title).toBe('Measurements (in)')
+    const chestM = text(t, 'chest', 'M')
+    expect(chestM.text).toBe('39.37')
+    expect(chestM.commit('39.37')).toEqual({ ok: true, edit: null })
+    expect(chestM.commit('40')).toEqual({ ok: true, edit: { kind: 'setMeasurement', name: 'chest', size: 'M', value: 1016 } })
   })
 
   it('renames through the name cell, refusing taken names', () => {
@@ -64,8 +75,9 @@ describe('measurementTable', () => {
 describe('variableTable', () => {
   it('shows formulas, values and the selected row', () => {
     const table = variableTable(raglanTee, resolved, { kind: 'variable', name: 'body_width' })
+    expect(table.columns.map((c) => c.header)).toEqual(['Name', 'Formula', 'Value (cm)'])
     expect(text(table, 'body_width', 'formula').text).toBe('(chest + chest_ease) / 4')
-    expect(cell(table, 'body_width', 'value')).toEqual({ kind: 'readout', columnId: 'value', label: 'body_width value', text: '275' })
+    expect(cell(table, 'body_width', 'value')).toEqual({ kind: 'readout', columnId: 'value', label: 'body_width value', text: '27.5' })
     expect(table.rows.filter((r) => r.selected).map((r) => r.name)).toEqual(['body_width'])
   })
 

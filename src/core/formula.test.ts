@@ -136,3 +136,16 @@ describe('renameReferences', () => {
     expect(renameReferences('neck +', 'neck', 'n')).toBe('n +')
   })
 })
+
+describe('unit constants', () => {
+  it('lets formulas name units, as mm', () => {
+    const value = (source: string): number => {
+      const result = compileFormula(source)
+      if (!result.ok) throw new Error(result.message)
+      return evaluateExpr(result.formula.expr, () => 0)
+    }
+    expect(value('10cm')).toBe(100)
+    expect(value('2inch + 3mm')).toBe(53.8)
+    expect(isValidName('cm')).toBe(false)
+  })
+})

@@ -129,3 +129,13 @@ describe('checkName', () => {
     expect(checkName(raglanTee, 'HPS', { kind: 'point', id: 'hps' })).toBeNull()
   })
 })
+
+describe('setUnits', () => {
+  it('changes display units only', () => {
+    const next = applyEdit(raglanTee, { kind: 'setUnits', units: 'in' })
+    expect(next.units).toBe('in')
+    expect(next.measurements).toBe(raglanTee.measurements)
+    expect(evaluate(next, 'M').points).toEqual(evaluate(raglanTee, 'M').points)
+    expect(applyEdit(raglanTee, { kind: 'setUnits', units: 'cm' })).toBe(raglanTee)
+  })
+})

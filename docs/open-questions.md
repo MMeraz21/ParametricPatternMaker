@@ -23,11 +23,16 @@ Every point is placed by formulas, so a drag has to rewrite them somehow:
 about the cursor, and there are zoom buttons. A preference toggle is the likely answer if this feels
 wrong with a mouse.
 
-### Which units should the inspector and panels show? (from M3, M4)
+### Inches as fractions? (from M4)
 
-Formulas are written in mm, and the inspector and the measurement table show mm, even when a pattern's
-display units are cm or inches. **Current default:** mm everywhere. Showing cm would mean converting typed
-values, and deciding whether numbers inside formulas are cm too.
+Inches show as decimals to the hundredth (`40.94`). Sewists working in inches often use fractions
+(`40 15/16`). **Current default:** decimals for display and input.
+
+### Variables that aren't lengths (from M4)
+
+Variable values are always shown converted to the display unit, which is wrong for a ratio such as
+`0.55`: in cm it shows as `0.1`. **Current default:** treat every variable as a length, since all of
+the raglan's are. A possible fix is a per-variable "unitless" flag.
 
 ### Should deleting something that's in use ask first? (from M4)
 
@@ -65,6 +70,10 @@ Fixing this is a small `evaluate` change.
   sides of a seam would be a separate "seam pairs" feature.
 - **Notch distance is measured from its segment's own start** (M2), even when the outline runs the
   segment backwards.
+- **Display units are cm or inches; formulas stay in mm** (M4). Switching units changes how measurements,
+  values and coordinates are shown, and how typed measurement values are read. A bare number in a formula
+  is always mm, because the app can't tell a length (`10`) from a ratio (`/ 4`). Formulas can name a unit
+  explicitly: `12cm`, `2inch`, `5mm`.
 - **Renaming rewrites every formula that uses the name** (M4), keeping the user's formatting. If a
   rewrite can't be done safely, the rename is refused rather than half-applied.
 - **Edits commit on Enter or when you click away** (M3, M4), not on every keystroke, so a half-typed
