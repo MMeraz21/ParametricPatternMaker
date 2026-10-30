@@ -5,7 +5,7 @@ import { inspectPoint, pointRoles, selectionForIssue } from './inspect'
 import { editorReducer, initEditorState } from './state'
 
 const breakHps = (pattern: Pattern): Pattern =>
-  applyEdit(pattern, { kind: 'setPointFormula', pointId: 'hps', axis: 'x', formula: 'nope' })
+  applyEdit(pattern, { kind: 'setFormula', owner: { kind: 'point', id: 'hps', axis: 'x' }, formula: 'nope' })
 
 describe('editorReducer', () => {
   const initial = initEditorState(raglanTee)
@@ -18,15 +18,32 @@ describe('editorReducer', () => {
   })
 
   it('applies edits and returns the same state for no-ops', () => {
-    const edited = editorReducer(initial, { type: 'edit', edit: { kind: 'setPointFormula', pointId: 'hps', axis: 'y', formula: '5' } })
+    const edited = editorReducer(initial, { type: 'edit', edit: { kind: 'setFormula', owner: { kind: 'point', id: 'hps', axis: 'y' }, formula: '5' } })
     expect(edited.pattern.points[0]?.y).toBe('5')
-    expect(editorReducer(edited, { type: 'edit', edit: { kind: 'setPointFormula', pointId: 'hps', axis: 'y', formula: '5' } })).toBe(edited)
+    expect(editorReducer(edited, { type: 'edit', edit: { kind: 'setFormula', owner: { kind: 'point', id: 'hps', axis: 'y' }, formula: '5' } })).toBe(edited)
   })
 
   it('keeps a point selected after its formula breaks', () => {
     const selected = editorReducer(initial, { type: 'select', selection: { kind: 'point', id: 'hps' } })
-    const broken = editorReducer(selected, { type: 'edit', edit: { kind: 'setPointFormula', pointId: 'hps', axis: 'x', formula: 'nope' } })
+    const broken = editorReducer(selected, { type: 'edit', edit: { kind: 'setFormula', owner: { kind: 'point', id: 'hps', axis: 'x' }, formula: 'nope' } })
     expect(broken.selection).toEqual({ kind: 'point', id: 'hps' })
+  })
+  it('switches the panel to the selected kind', () => {
+    const selected = editorReducer(initial, { type: 'select', selection: { kind: 'variable', name: 'body_width' } })
+    expect(selected.panel).toBe('variable')
+    expect(editorReducer(selected, { type: 'showPanel', panel: 'point' }).panel).toBe('point')
+  })
+
+  it('selects added items, follows renames and clears on remove', () => {
+    const added = editorReducer(initial, {
+      type: 'edit',
+      edit: { kind: 'add', item: { kind: 'variable', variable: { name: 'ease', formula: '5' } } }
+    })
+    expect(added.selection).toEqual({ kind: 'variable', name: 'ease' })
+    const renamed = editorReducer(added, { type: 'edit', edit: { kind: 'rename', item: { kind: 'variable', name: 'ease' }, to: 'ease2' } })
+    expect(renamed.selection).toEqual({ kind: 'variable', name: 'ease2' })
+    const removed = editorReducer(renamed, { type: 'edit', edit: { kind: 'remove', item: { kind: 'variable', name: 'ease2' } } })
+    expect(removed.selection).toBeNull()
   })
 })
 
@@ -69,11 +86,12 @@ describe('inspectPoint', () => {
 })
 
 describe('selectionForIssue', () => {
-  it('selects the point for point issues and nothing for others', () => {
+  it('selects the item an issue is about', () => {
     const pattern = breakHps(raglanTee)
     const [first] = evaluate(pattern, 'M').issues
     if (!first) throw new Error('expected an issue')
     expect(selectionForIssue(first)).toEqual({ kind: 'point', id: 'hps' })
     expect(selectionForIssue({ kind: 'unknown-size', size: 'Q', message: '' })).toBeNull()
+    expect(selectionForIssue({ kind: 'not-finite', item: { kind: 'variable', name: 'v' }, message: '' })).toEqual({ kind: 'variable', name: 'v' })
   })
 })

@@ -41,7 +41,7 @@ describe('buildScene', () => {
   })
 
   it('leaves out a broken point, its segments and its piece, but keeps the rest', () => {
-    const pattern = applyEdit(raglanTee, { kind: 'setPointFormula', pointId: 'cfHem', axis: 'y', formula: 'nope' })
+    const pattern = applyEdit(raglanTee, { kind: 'setFormula', owner: { kind: 'point', id: 'cfHem', axis: 'y' }, formula: 'nope' })
     const scene = buildScene(pattern, evaluate(pattern, 'M'), { kind: 'point', id: 'cfHem' })
     expect(scene.pieces).toEqual([])
     expect(scene.markers.map((m) => m.id)).not.toContain('cfHem')

@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import type { Axis, PatternEdit } from '@core'
+import { UNIT_LABEL, formatLength, type Axis, type DisplayUnits, type PatternEdit } from '@core'
 import type { AxisInspection, PointInspection } from './inspect'
 
 interface InspectorProps {
   inspection: PointInspection | null
+  units: DisplayUnits
   onEdit: (edit: PatternEdit) => void
 }
 
-export function Inspector({ inspection, onEdit }: InspectorProps) {
+export function Inspector({ inspection, units, onEdit }: InspectorProps) {
   if (!inspection) {
     return (
       <section aria-label="Point inspector" className="p-4 text-sm text-neutral-500">
@@ -39,7 +40,8 @@ export function Inspector({ inspection, onEdit }: InspectorProps) {
           name={inspection.name}
           axis={axis}
           inspection={inspection.axes[axis]}
-          onCommit={(formula) => onEdit({ kind: 'setPointFormula', pointId: inspection.id, axis, formula })}
+          units={units}
+          onCommit={(formula) => onEdit({ kind: 'setFormula', owner: { kind: 'point', id: inspection.id, axis }, formula })}
         />
       ))}
     </section>
@@ -50,6 +52,7 @@ interface AxisFieldProps {
   name: string
   axis: Axis
   inspection: AxisInspection
+  units: DisplayUnits
   onCommit: (formula: string) => void
 }
 
@@ -57,7 +60,7 @@ interface AxisFieldProps {
  * A formula field with a local draft, committed on Enter or blur and reverted with Escape. The parent
  * keys it on the committed formula, so an outside change (undo, another panel) resets the draft.
  */
-function AxisField({ name, axis, inspection, onCommit }: AxisFieldProps) {
+function AxisField({ name, axis, inspection, units, onCommit }: AxisFieldProps) {
   const [draft, setDraft] = useState(inspection.formula)
   const id = `formula-${axis}`
   return (
@@ -67,7 +70,7 @@ function AxisField({ name, axis, inspection, onCommit }: AxisFieldProps) {
           {name}.{axis}
         </label>
         <output aria-label={`${name}.${axis} value`} className="text-sm tabular-nums text-neutral-600">
-          {inspection.value === null ? '—' : `${formatMm(inspection.value)} mm`}
+          {inspection.value === null ? '—' : `${formatLength(inspection.value, units)} ${UNIT_LABEL[units]}`}
         </output>
       </div>
       <input
@@ -94,5 +97,3 @@ function AxisField({ name, axis, inspection, onCommit }: AxisFieldProps) {
     </div>
   )
 }
-
-const formatMm = (value: number): string => String(Math.round(value * 10) / 10)

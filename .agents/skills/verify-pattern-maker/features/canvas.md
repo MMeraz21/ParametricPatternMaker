@@ -41,8 +41,8 @@ Preconditions:
 - **Zoom about the cursor.** Hover HPS, then hold Control and wheel up. `window.mouse.move(x, y)`, `keyboard.down('Control')`, `mouse.wheel(0, -100)`. HPS stays within 1 px of where it was and the readout goes up.
 - **Constant size.** Compare a marker circle's box before and after zooming. It doesn't change.
 - **Pan.** Drag from empty canvas. `mouse.down()`, `mouse.move()` in steps, `mouse.up()`. HPS moves by the drag delta (within 1 px). A plain `mouse.wheel(0, 50)` moves it up by 50 px.
-- **Select.** Click the Underarm circle. `marker('Underarm').locator('circle').click()`. The inspector heading is `Underarm`, `Underarm x formula` holds `body_width`, the `Underarm.x value` output reads `275 mm`, and the marker has `aria-pressed="true"`. A control point shows `Control point`.
-- **Edit.** Fill `HPS x formula` with `neck_width + 30` and press Enter. `HPS.x value` reads `100 mm`, and both the HPS and NeckC1 markers move right.
+- **Select.** Click the Underarm circle. `marker('Underarm').locator('circle').click()`. The inspector heading is `Underarm`, `Underarm x formula` holds `body_width`, the `Underarm.x value` output reads `27.5 cm` (the raglan displays in cm), and the marker has `aria-pressed="true"`. A control point shows `Control point`.
+- **Edit.** Fill `HPS x formula` with `neck_width + 30` and press Enter. `HPS.x value` reads `10 cm`, and both the HPS and NeckC1 markers move right.
 - **Escape.** Type into the field, then press Escape. The field shows the committed formula again.
 - **Broken.** Fill `HPS x formula` with `nope` and press Enter. The `alert` appears, there's no `Point HPS` marker, and the issues heading is no longer `Issues (0)`. Select another point, then click the `'nope' is not defined` issue button. The inspector is back on HPS. Fixing the formula brings the marker back and returns to `Issues (0)`.
 - **Clear.** Click empty canvas. The inspector shows `Select a point on the canvas to see its formulas.`
