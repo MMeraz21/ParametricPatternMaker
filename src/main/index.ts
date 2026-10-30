@@ -14,6 +14,9 @@ function createWindow(): void {
     }
   })
 
+  // Pinch zooms the canvas, not the whole UI.
+  void win.webContents.setVisualZoomLevelLimits(1, 1)
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

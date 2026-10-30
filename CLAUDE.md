@@ -65,6 +65,18 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    is in `geometry.ts`, a kernel with no model imports (arc length, sampling, flattening, area, SVG
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 
+Pattern changes go through `applyEdit(pattern, edit)` in `src/core/edit.ts`. It is pure, and a no-op
+returns the same reference.
+
+### Renderer
+
+`App.tsx` holds the document in one `useReducer` (`editor/state.ts`). From it, `evaluate` produces the
+ResolvedPattern, and `canvas/scene.ts` builds plain drawable data. The canvas camera (`canvas/camera.ts`)
+is view state owned by `Canvas`, so pan and zoom never re-evaluate. Input policy lives in `canvas/input.ts`:
+wheel and pinch, click versus drag-pan, and nearest-marker picking. Everything except the `.tsx` components
+is pure and unit tested. Components are proved with the `canvas` journey. Design:
+`docs/design/m3-canvas.md`.
+
 `src/core/fixtures/raglan.ts` is the shared raglan tee fixture used across tests. Extend it as
 milestones add pieces; it is the MVP acceptance test.
 

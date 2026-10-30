@@ -12,6 +12,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "composite": true,
-    "paths": { "@core/*": ["./src/core/*"] }
+    "paths": { "@core": ["./src/core/index.ts"], "@core/*": ["./src/core/*"] }
   }
 }

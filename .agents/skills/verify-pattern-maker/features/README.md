@@ -44,9 +44,10 @@ commands and observable proof.
 
 - [App shell](./app-shell.md) covers the main window, its title and heading, the version shown via
   the preload bridge, styling, and renderer isolation.
+- [Canvas](./canvas.md) covers drawing the pattern, pan and zoom, selecting a point, and editing
+  its formulas in the inspector, including fixing a broken point from the issues panel.
 
 ## Not yet built
 
-PLAN.md milestones 3 onward add the first real user features: canvas with pan/zoom and point
-selection, editor panels (measurements, variables, points), pieces, size switcher, PDF/SVG export,
+PLAN.md milestones 4 onward add: editor panels (measurements, variables, points), pieces, size switcher, PDF/SVG export,
 open/save, and Convex sync. Add a feature file and a journey for each as it lands.
