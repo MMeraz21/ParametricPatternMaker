@@ -39,7 +39,7 @@ export function Inspector({ inspection, onEdit }: InspectorProps) {
           name={inspection.name}
           axis={axis}
           inspection={inspection.axes[axis]}
-          onCommit={(formula) => onEdit({ kind: 'setPointFormula', pointId: inspection.id, axis, formula })}
+          onCommit={(formula) => onEdit({ kind: 'setFormula', owner: { kind: 'point', id: inspection.id, axis }, formula })}
         />
       ))}
     </section>

@@ -46,8 +46,10 @@ commands and observable proof.
   the preload bridge, styling, and renderer isolation.
 - [Canvas](./canvas.md) covers drawing the pattern, pan and zoom, selecting a point, and editing
   its formulas in the inspector, including fixing a broken point from the issues panel.
+- [Editor panels](./editor-panels.md) covers the measurement table, variables and points tabs:
+  editing, renaming, adding, deleting, and jumping to rows from the canvas and issues list.
 
 ## Not yet built
 
-PLAN.md milestones 4 onward add: editor panels (measurements, variables, points), pieces, size switcher, PDF/SVG export,
+PLAN.md milestones 5 onward add: pieces, size switcher, PDF/SVG export,
 open/save, and Convex sync. Add a feature file and a journey for each as it lands.

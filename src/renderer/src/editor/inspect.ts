@@ -61,16 +61,17 @@ export function inspectPoint(pattern: Pattern, resolved: ResolvedPattern, id: Id
   }
 }
 
-/** Where clicking an issue takes you. Point issues select the point; others have nothing selectable yet. */
+/** Where clicking an issue takes you: the measurement, variable or point it is about. */
 export function selectionForIssue(issue: EvaluationIssue): Selection | null {
   if (issue.kind === 'unknown-size') return null
   const { item } = issue
   switch (item.kind) {
+    case 'measurement':
+    case 'variable':
+      return { kind: item.kind, name: item.name }
     case 'point':
     case 'pointCoord':
       return { kind: 'point', id: item.id }
-    case 'measurement':
-    case 'variable':
     case 'segment':
     case 'piece':
     case 'notch':

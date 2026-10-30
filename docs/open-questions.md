@@ -23,11 +23,28 @@ Every point is placed by formulas, so a drag has to rewrite them somehow:
 about the cursor, and there are zoom buttons. A preference toggle is the likely answer if this feels
 wrong with a mouse.
 
-### Which units should the inspector show? (from M3)
+### Which units should the inspector and panels show? (from M3, M4)
 
-Formulas are written in mm and the inspector shows mm, even when a pattern's display units are cm or
-inches. **Current default:** mm everywhere. Revisit in M4, when the editor panels show
-measurements.
+Formulas are written in mm, and the inspector and the measurement table show mm, even when a pattern's
+display units are cm or inches. **Current default:** mm everywhere. Showing cm would mean converting typed
+values, and deciding whether numbers inside formulas are cm too.
+
+### Should deleting something that's in use ask first? (from M4)
+
+Deleting a measurement, variable or point that other formulas use is allowed. The dependents then show
+"'x' is not defined" issues, and clicking one jumps to the item that needs fixing. Defining the name again
+(by renaming or adding) clears them. **Current default:** no confirmation and no "used by N" count.
+Possible additions are a confirmation that lists the dependents, or a "used by" column.
+
+### Adding, removing and renaming sizes (from M4)
+
+The measurement table has one column per size in `pattern.sizes`, but you can't add or remove sizes
+yet. **Current default:** sizes are fixed (S to XXL in the raglan). Planned for M6, the size switcher.
+
+### Reordering rows (from M4)
+
+New measurements, variables and points go at the bottom, and rows can't be reordered. **Current
+default:** no reordering. Order doesn't affect evaluation.
 
 ### Should formulas reference segment lengths? (from M2)
 
@@ -48,3 +65,7 @@ Fixing this is a small `evaluate` change.
   sides of a seam would be a separate "seam pairs" feature.
 - **Notch distance is measured from its segment's own start** (M2), even when the outline runs the
   segment backwards.
+- **Renaming rewrites every formula that uses the name** (M4), keeping the user's formatting. If a
+  rewrite can't be done safely, the rename is refused rather than half-applied.
+- **Edits commit on Enter or when you click away** (M3, M4), not on every keystroke, so a half-typed
+  formula doesn't make points blink in and out.

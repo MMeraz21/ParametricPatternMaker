@@ -68,16 +68,20 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 
 Pattern changes go through `applyEdit(pattern, edit)` in `src/core/edit.ts`. It is pure, and a no-op
-returns the same reference.
+or refused edit returns the same reference. There are five edits (`add`, `remove`, `rename`,
+`setFormula`, `setMeasurement`), and `checkName` is the one name rule. `rename` rewrites references
+with `renameReferences` in `formula.ts`, which keeps the user's text.
 
 ### Renderer
 
 `App.tsx` holds the document in one `useReducer` (`editor/state.ts`). From it, `evaluate` produces the
 ResolvedPattern, and `canvas/scene.ts` builds plain drawable data. The canvas camera (`canvas/camera.ts`)
 is view state owned by `Canvas`, so pan and zoom never re-evaluate. Input policy lives in `canvas/input.ts`:
-wheel and pinch, click versus drag-pan, and nearest-marker picking. Everything except the `.tsx` components
-is pure and unit tested. Components are proved with the `canvas` journey. Design:
-`docs/design/m3-canvas.md`.
+wheel and pinch, click versus drag-pan, and nearest-marker picking. The editor panels are one `EditableTable`
+over a `TableModel` built in `panels/tables.ts`. Each cell's `commit(draft)` returns an edit or a
+rejection message, so per-kind behaviour lives there and not in components. Everything except the
+`.tsx` components is pure and unit tested. Components are proved with the `canvas` and `editor-panels`
+journeys. Designs: `docs/design/m3-canvas.md` and `docs/design/m4-editor-panels.md`.
 
 `src/core/fixtures/raglan.ts` is the shared raglan tee fixture used across tests. Extend it as
 milestones add pieces; it is the MVP acceptance test.

@@ -102,9 +102,15 @@ export type CompileResult = { ok: true; formula: CompiledFormula } | { ok: false
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/
 
+/**
+ * Words mathjs parses as operators or literals rather than names: `not` doesn't parse at all, `NaN`
+ * and `true` become constants, and `a mod b` is an operator.
+ */
+const PARSER_KEYWORDS = new Set(['mod', 'to', 'in', 'and', 'or', 'xor', 'not', 'true', 'false', 'null', 'undefined', 'Infinity', 'NaN'])
+
 /** Names that user items (measurements, variables, points) may not use. */
 export function isReservedName(name: string): boolean {
-  return isFunctionName(name) || isConstantName(name)
+  return isFunctionName(name) || isConstantName(name) || PARSER_KEYWORDS.has(name)
 }
 
 export function isValidName(name: string): boolean {
@@ -247,4 +253,60 @@ export function evaluateExpr(expr: Expr, resolve: (ref: Reference) => number): n
       return _exhaustive
     }
   }
+}
+
+const NUMBER = /^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/
+const NAME = /^[A-Za-z_][A-Za-z0-9_]*/
+
+/**
+ * Rewrite every reference to `from` as `to` in a formula, leaving the rest of the user's text as
+ * typed. `A.x` renames `A` but never the axis; function names, numbers (`1e5`), strings and `#`
+ * comments are left alone.
+ *
+ * Returns undefined if the rewrite would change what the formula means: when the source compiles,
+ * the result must compile to the same references with `from` replaced by `to`.
+ */
+export function renameReferences(source: string, from: string, to: string): string | undefined {
+  let out = ''
+  let i = 0
+  while (i < source.length) {
+    const rest = source.slice(i)
+    const char = source.charAt(i)
+    if (char === '#') {
+      out += rest
+      break
+    }
+    if (char === '"' || char === "'") {
+      const close = source.indexOf(char, i + 1)
+      const end = close === -1 ? source.length : close + 1
+      out += source.slice(i, end)
+      i = end
+      continue
+    }
+    const number = NUMBER.exec(rest)
+    if (number) {
+      out += number[0]
+      i += number[0].length
+      continue
+    }
+    const name = NAME.exec(rest)
+    if (name) {
+      const word = name[0]
+      const isProperty = /\.\s*$/.test(source.slice(0, i))
+      const isCall = /^\s*\(/.test(source.slice(i + word.length))
+      out += word === from && !isProperty && !isCall ? to : word
+      i += word.length
+      continue
+    }
+    out += char
+    i += 1
+  }
+
+  const before = compileFormula(source)
+  if (!before.ok) return out
+  const after = compileFormula(out)
+  if (!after.ok) return undefined
+  const expected = before.formula.references.map((ref) => referenceKey(ref.name === from ? { ...ref, name: to } : ref))
+  const actual = after.formula.references.map(referenceKey)
+  return expected.length === actual.length && expected.every((key, k) => key === actual[k]) ? out : undefined
 }

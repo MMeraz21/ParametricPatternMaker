@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compileFormula, evaluateExpr, isValidName, type CompiledFormula, type Reference } from './formula'
+import { compileFormula, evaluateExpr, isValidName, renameReferences, type CompiledFormula, type Reference } from './formula'
 
 function compile(source: string): CompiledFormula {
   const result = compileFormula(source)
@@ -100,5 +100,39 @@ describe('isValidName', () => {
     expect(isValidName('')).toBe(false)
     expect(isValidName('pi')).toBe(false)
     expect(isValidName('sqrt')).toBe(false)
+  })
+})
+
+describe('reserved parser keywords', () => {
+  it('rejects words mathjs treats as operators or literals', () => {
+    for (const word of ['not', 'mod', 'and', 'true', 'NaN', 'Infinity']) expect(isValidName(word)).toBe(false)
+  })
+})
+
+describe('renameReferences', () => {
+  it('renames whole names and keeps the formatting', () => {
+    expect(renameReferences('neck/6  +  5', 'neck', 'neck_circ')).toBe('neck_circ/6  +  5')
+    expect(renameReferences('neckline + neck', 'neck', 'n')).toBe('neckline + n')
+    expect(renameReferences('max(neck, 2neck)', 'neck', 'n')).toBe('max(n, 2n)')
+  })
+
+  it('renames point names but not their axes', () => {
+    expect(renameReferences('HPS.x + (Underarm.x - HPS.x) * 0.55', 'HPS', 'Shoulder')).toBe(
+      'Shoulder.x + (Underarm.x - Shoulder.x) * 0.55'
+    )
+    expect(renameReferences('A.x + x', 'x', 'width')).toBe('A.x + width')
+  })
+
+  it('leaves numbers, function names and comments alone', () => {
+    expect(renameReferences('1e5 + e', 'e', 'ease')).toBe('1e5 + ease')
+    expect(renameReferences('hypot(a, 1) # a is the side', 'a', 'side')).toBe('hypot(side, 1) # a is the side')
+  })
+
+  it('returns the source unchanged when the name is not used', () => {
+    expect(renameReferences('chest / 4', 'neck', 'n')).toBe('chest / 4')
+  })
+
+  it('still rewrites formulas that do not compile', () => {
+    expect(renameReferences('neck +', 'neck', 'n')).toBe('n +')
   })
 })
