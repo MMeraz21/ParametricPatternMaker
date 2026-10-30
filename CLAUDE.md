@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Desktop app for drafting parametric sewing patterns. `PLAN.md` is the source of truth for scope, data
 model and milestones; `workflow.md` describes how we work and which skills to use per milestone.
+`docs/open-questions.md` lists deferred product decisions and their current defaults; add to it
+rather than asking the user to decide things they can't judge yet.
 
 ## Commands
 
@@ -64,6 +66,18 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    distances are the only other DAG nodes. Closure is checked by point id, not coordinates. All maths
    is in `geometry.ts`, a kernel with no model imports (arc length, sampling, flattening, area, SVG
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
+
+Pattern changes go through `applyEdit(pattern, edit)` in `src/core/edit.ts`. It is pure, and a no-op
+returns the same reference.
+
+### Renderer
+
+`App.tsx` holds the document in one `useReducer` (`editor/state.ts`). From it, `evaluate` produces the
+ResolvedPattern, and `canvas/scene.ts` builds plain drawable data. The canvas camera (`canvas/camera.ts`)
+is view state owned by `Canvas`, so pan and zoom never re-evaluate. Input policy lives in `canvas/input.ts`:
+wheel and pinch, click versus drag-pan, and nearest-marker picking. Everything except the `.tsx` components
+is pure and unit tested. Components are proved with the `canvas` journey. Design:
+`docs/design/m3-canvas.md`.
 
 `src/core/fixtures/raglan.ts` is the shared raglan tee fixture used across tests. Extend it as
 milestones add pieces; it is the MVP acceptance test.

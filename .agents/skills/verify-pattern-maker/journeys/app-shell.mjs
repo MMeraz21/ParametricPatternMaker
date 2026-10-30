@@ -14,13 +14,13 @@ export default async function appShell({ app, window, evidence, rendererErrors, 
   await version.waitFor({ timeout: 5_000 })
   evidence.check('shell-version: shows package version via bridge', await version.textContent(), `v${packageVersion}`)
 
-  // shell-styles: Tailwind CSS is loaded (the layout centers content in a flex container).
+  // shell-styles: Tailwind CSS is loaded (header above a full-height flex workspace).
   const layout = await window.locator('main').evaluate((el) => {
     const style = getComputedStyle(el)
-    return { display: style.display, justifyContent: style.justifyContent, height: el.getBoundingClientRect().height }
+    return { display: style.display, bottom: el.getBoundingClientRect().bottom, height: window.innerHeight }
   })
-  evidence.check('shell-styles: main is a centered flex container', `${layout.display}/${layout.justifyContent}`, 'flex/center')
-  evidence.check('shell-styles: main fills the window height', layout.height, (h) => h >= 700)
+  evidence.check('shell-styles: main is a flex workspace', layout.display, 'flex')
+  evidence.check('shell-styles: main reaches the bottom of the window', layout.bottom, (b) => Math.abs(b - layout.height) <= 1)
 
   // shell-isolation: renderer has no Node access.
   const nodeGlobals = await window.evaluate(() => ({ require: typeof globalThis.require, process: typeof globalThis.process }))

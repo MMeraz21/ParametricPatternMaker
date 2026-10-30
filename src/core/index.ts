@@ -14,3 +14,4 @@ export {
   type ResolvedPiece,
   type ResolvedSegment
 } from './outline'
+export * from './edit'
