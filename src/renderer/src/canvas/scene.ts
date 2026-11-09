@@ -1,4 +1,4 @@
-import { pathData, type Curve, type Id, type Pattern, type ResolvedPattern, type Segment, type Vec2 } from '@core'
+import { curvePoints, pathData, segmentPointIds, type Id, type Pattern, type ResolvedPattern, type Segment, type Vec2 } from '@core'
 import { pointRoles, type PointRole } from '../editor/inspect'
 import type { Selection } from '../editor/state'
 import { boundsOf, type Bounds } from './camera'
@@ -50,16 +50,10 @@ export interface SceneMarker {
   readonly selected: boolean
 }
 
-const pointIdsOf = (segment: Segment): Id[] =>
-  segment.kind === 'line' ? [segment.from, segment.to] : [segment.from, segment.c1, segment.c2, segment.to]
-
-const curvePoints = (curve: Curve): Vec2[] =>
-  curve.kind === 'line' ? [curve.from, curve.to] : [curve.from, curve.c1, curve.c2, curve.to]
-
 export function buildScene(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): Scene {
   const roles = pointRoles(pattern)
   const selectedId = selection?.kind === 'point' ? selection.id : null
-  const touchesSelection = (segment: Segment): boolean => selectedId !== null && pointIdsOf(segment).includes(selectedId)
+  const touchesSelection = (segment: Segment): boolean => selectedId !== null && segmentPointIds(segment).includes(selectedId)
 
   const resolvedPieces = Object.values(resolved.pieces)
   const inPiece = new Set(resolvedPieces.flatMap((piece) => piece.outline.map((edge) => edge.segmentId)))
@@ -75,9 +69,12 @@ export function buildScene(pattern: Pattern, resolved: ResolvedPattern, selectio
   // Author order from the pattern, not record key order.
   const segments: SceneSegment[] = []
   const handles: SceneHandle[] = []
+  const seenSegments = new Set<Id>()
   for (const definition of pattern.segments) {
     const segment = resolved.segments[definition.id]
-    if (!segment) continue
+    // A duplicate id resolves to the first definition (and is reported), so draw it once.
+    if (!segment || seenSegments.has(definition.id)) continue
+    seenSegments.add(definition.id)
     const highlighted = touchesSelection(definition)
     segments.push({ id: segment.id, d: pathData([segment.curve]), highlighted, inPiece: inPiece.has(segment.id) })
     if (segment.curve.kind === 'cubic') {

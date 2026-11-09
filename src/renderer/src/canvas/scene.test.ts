@@ -36,6 +36,12 @@ describe('buildScene', () => {
     expect(scene.handles.filter((h) => h.highlighted)).toHaveLength(2)
   })
 
+  it('draws a duplicated segment id once', () => {
+    const pattern = { ...raglanTee, segments: [...raglanTee.segments, { id: 'frontCf', kind: 'line' as const, from: 'hps', to: 'cfHem' }] }
+    const scene = buildScene(pattern, evaluate(pattern, 'M'), null)
+    expect(scene.segments.filter((s) => s.id === 'frontCf')).toHaveLength(1)
+  })
+
   it('bounds every point', () => {
     expect(buildScene(raglanTee, resolved, null).bounds).toEqual({ min: { x: 0, y: 0 }, max: { x: 275, y: 690 } })
   })

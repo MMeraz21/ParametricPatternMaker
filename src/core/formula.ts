@@ -259,7 +259,8 @@ export function evaluateExpr(expr: Expr, resolve: (ref: Reference) => number): n
   }
 }
 
-const NUMBER = /^(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/
+// Hex, binary and octal literals first, so `0x1F` isn't read as `0` followed by the name `x1F`.
+const NUMBER = /^(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*/
 
 /**
@@ -273,6 +274,9 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*/
 export function renameReferences(source: string, from: string, to: string): string | undefined {
   let out = ''
   let i = 0
+  // True right after a `.` operator (whitespace allowed), so the next name is an axis, not a reference.
+  // A dot inside a number (`2.`) is part of the number token and doesn't count.
+  let afterDot = false
   while (i < source.length) {
     const rest = source.slice(i)
     const char = source.charAt(i)
@@ -280,37 +284,46 @@ export function renameReferences(source: string, from: string, to: string): stri
       out += rest
       break
     }
+    if (/\s/.test(char)) {
+      out += char
+      i += 1
+      continue
+    }
     if (char === '"' || char === "'") {
       const close = source.indexOf(char, i + 1)
       const end = close === -1 ? source.length : close + 1
       out += source.slice(i, end)
       i = end
+      afterDot = false
       continue
     }
     const number = NUMBER.exec(rest)
     if (number) {
       out += number[0]
       i += number[0].length
+      afterDot = false
       continue
     }
     const name = NAME.exec(rest)
     if (name) {
       const word = name[0]
-      const isProperty = /\.\s*$/.test(source.slice(0, i))
       const isCall = /^\s*\(/.test(source.slice(i + word.length))
-      out += word === from && !isProperty && !isCall ? to : word
+      out += word === from && !afterDot && !isCall ? to : word
       i += word.length
+      afterDot = false
       continue
     }
     out += char
     i += 1
+    afterDot = char === '.'
   }
 
   const before = compileFormula(source)
   if (!before.ok) return out
   const after = compileFormula(out)
   if (!after.ok) return undefined
-  const expected = before.formula.references.map((ref) => referenceKey(ref.name === from ? { ...ref, name: to } : ref))
-  const actual = after.formula.references.map(referenceKey)
-  return expected.length === actual.length && expected.every((key, k) => key === actual[k]) ? out : undefined
+  // Compare as sets: `a + b` renamed a -> b references only `b`, which is correct.
+  const expected = new Set(before.formula.references.map((ref) => referenceKey(ref.name === from ? { ...ref, name: to } : ref)))
+  const actual = new Set(after.formula.references.map(referenceKey))
+  return expected.size === actual.size && [...expected].every((key) => actual.has(key)) ? out : undefined
 }

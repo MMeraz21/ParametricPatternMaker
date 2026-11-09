@@ -95,6 +95,23 @@ describe('variableTable', () => {
   })
 })
 
+describe('review fixes', () => {
+  it('rejects a rename that core would refuse, with a message', () => {
+    // `e2` is a free, valid name, but `2.ease2` would become `2.e2`, which reads as the number 200.
+    const pattern: Pattern = { ...raglanTee, variables: [...raglanTee.variables, { name: 'ease2', formula: '1' }, { name: 'w', formula: '2.ease2' }] }
+    const t = variableTable(pattern, evaluate(pattern, 'M'), null)
+    expect(text(t, 'ease2', 'name').commit('e2')).toEqual({ ok: false, message: "Can't rename 'ease2' to 'e2' without changing what a formula means" })
+    expect(text(t, 'ease2', 'name').commit('ease3')).toMatchObject({ ok: true })
+  })
+
+  it('shows one row per name when a pattern has duplicates', () => {
+    const pattern: Pattern = { ...raglanTee, measurements: [...raglanTee.measurements, { name: 'chest', values: { M: 1 } }] }
+    const t = measurementTable(pattern, evaluate(pattern, 'M'), null)
+    expect(t.rows.filter((r) => r.name === 'chest')).toHaveLength(1)
+    expect(text(t, 'chest', 'M').text).toBe('100')
+  })
+})
+
 describe('pointTable', () => {
   it('lists points by name with editable formulas', () => {
     const table = pointTable(raglanTee, resolved, null)

@@ -56,8 +56,15 @@ export default async function editorPanels({ window, evidence, rendererErrors })
 
   // panels-rename
   await tab('Measurements').click()
-  await commit('neck name', 'neck_circ')
+  // Commit the rename with Tab: focus must land in the next cell of the renamed row, not get lost.
+  await field('neck name').fill('neck_circ')
+  await field('neck name').press('Tab')
   evidence.check('panels-rename: renamed row', await field('neck_circ name').inputValue(), 'neck_circ')
+  evidence.check(
+    'panels-rename: Tab after a rename keeps focus in the row',
+    await window.evaluate(() => document.activeElement?.getAttribute('aria-label')),
+    'neck_circ S'
+  )
   await commit('chest name', 'neck_circ')
   evidence.check('panels-rename: refuses a taken name', await window.getByRole('alert').textContent(), "'neck_circ' is already used by a measurement")
   await field('chest name').press('Escape')

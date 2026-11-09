@@ -40,7 +40,7 @@ Preconditions:
 - **Rejected value.** Fill `chest M` with `wide` and press Enter. An alert reads `'wide' is not a number`. Escape restores `104`.
 - **Variable formula.** On the Variables tab, fill `chest_ease formula` with `12cm` and press Enter. `body_width value` reads `29`.
 - **Units.** `getByLabel('Units').selectOption('in')`. `body_width value` reads `11.42`, the table is `Measurements (in)` and `chest M` reads `40.94`. Typing `42` there moves the Underarm marker. Switching back to `cm` shows `104`.
-- **Rename.** Fill `neck name` with `neck_circ` and press Enter. `neck_width formula` reads `neck_circ / 6 + 5` and the heading `Issues (0)` is visible. Renaming `chest` to `neck_circ` shows `'neck_circ' is already used by a measurement`.
+- **Rename.** Fill `neck name` with `neck_circ` and press Tab. Focus lands in `neck_circ S`. `neck_width formula` reads `neck_circ / 6 + 5` and the heading `Issues (0)` is visible. Renaming `chest` to `neck_circ` shows `'neck_circ' is already used by a measurement`.
 - **Add.** Click `+ Add variable`. A row `variable_1` appears and is selected (`aria-selected="true"`). Renaming it to `ease` works.
 - **Delete with dependents.** Click `Delete chest_ease`. The issues list shows `'chest_ease' is not defined`. Clicking it opens Variables with `body_width` selected. Renaming `ease` to `chest_ease` clears the issues.
 - **Points.** On Points, click `+ Add point`. `Point P_1` appears on the canvas. Set `P_1 x` to `Underarm.x + 50`, and the marker moves right. Rename it to `Extra`, and `Point Extra` exists. `Delete Extra` removes the marker.

@@ -1,5 +1,4 @@
 import {
-  DEGENERATE_LENGTH,
   curveLength,
   flatten,
   reverseCurve,
@@ -10,7 +9,7 @@ import {
   type Vec2
 } from './geometry'
 import type { EvaluationIssue, ItemRef, ResolvedPoint } from './evaluate'
-import type { Id, Pattern, Piece, Segment } from './model'
+import { segmentPointIds, type Id, type Pattern, type Piece, type Segment } from './model'
 
 /**
  * Geometry resolution: turns evaluated points into segment curves and closed, oriented piece
@@ -96,20 +95,10 @@ export interface GeometryOutput {
   readonly issues: EvaluationIssue[]
 }
 
-export const notchKey = (pieceId: Id, notchId: Id): string => `notch:${pieceId}/${notchId}`
+/** Outlines whose area is below this fraction of perimeter² enclose nothing. */
+const DEGENERATE_AREA_RATIO = 1e-9
 
-function segmentPointIds(segment: Segment): Id[] {
-  switch (segment.kind) {
-    case 'line':
-      return [segment.from, segment.to]
-    case 'bezier':
-      return [segment.from, segment.c1, segment.c2, segment.to]
-    default: {
-      const _exhaustive: never = segment
-      return _exhaustive
-    }
-  }
-}
+export const notchKey = (pieceId: Id, notchId: Id): string => `notch:${pieceId}/${notchId}`
 
 /** The only mapping from model segment kinds to kernel curves. Undefined if any point is unresolved. */
 function toCurve(segment: Segment, points: Readonly<Record<Id, ResolvedPoint>>): Curve | undefined {
@@ -271,7 +260,10 @@ function resolvePiece(
   const outline: [OutlineEdge, ...OutlineEdge[]] = [first, ...rest]
 
   const signed = signedArea(outline.map((edge) => edge.curve))
-  if (Math.abs(signed) < DEGENERATE_LENGTH) {
+  // Compare like with like: an area against the square of the outline's size, so floating-point
+  // noise on a flat outline can't pass as a real (and arbitrarily oriented) piece.
+  const perimeter = outline.reduce((sum, edge) => sum + edge.length, 0)
+  if (Math.abs(signed) <= DEGENERATE_AREA_RATIO * perimeter ** 2) {
     issues.push({ kind: 'degenerate-outline', item, message: `Piece '${piece.name}' encloses no area` })
     return undefined
   }

@@ -35,7 +35,8 @@ export function PanelDock({ table, onShowPanel, onEdit, onSelect }: PanelDockPro
         ))}
       </div>
       <div role="tabpanel" aria-label={table.title} className="min-h-0 flex-1">
-        <EditableTable table={table} onEdit={onEdit} onSelect={onSelect} />
+        {/* Keyed by tab so a draft in one table can't reappear in a row of another. */}
+        <EditableTable key={table.kind} table={table} onEdit={onEdit} onSelect={onSelect} />
       </div>
     </section>
   )

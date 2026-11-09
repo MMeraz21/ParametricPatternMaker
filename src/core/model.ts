@@ -60,6 +60,20 @@ export type BezierSegment = z.infer<typeof BezierSegmentSchema>
 export const SegmentSchema = z.discriminatedUnion('kind', [LineSegmentSchema, BezierSegmentSchema])
 export type Segment = z.infer<typeof SegmentSchema>
 
+/** Every point a segment uses, in drawing order: from, [c1, c2,] to. */
+export function segmentPointIds(segment: Segment): Id[] {
+  switch (segment.kind) {
+    case 'line':
+      return [segment.from, segment.to]
+    case 'bezier':
+      return [segment.from, segment.c1, segment.c2, segment.to]
+    default: {
+      const _exhaustive: never = segment
+      return _exhaustive
+    }
+  }
+}
+
 /** A segment used in a piece outline, optionally traversed backwards. */
 export const SegmentRefSchema = z.object({
   segmentId: IdSchema,

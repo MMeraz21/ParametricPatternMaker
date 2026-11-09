@@ -1,5 +1,6 @@
 import {
   UNIT_LABEL,
+  applyEdit,
   checkName,
   formatLength,
   toMm,
@@ -90,9 +91,21 @@ function nameCell(pattern: Pattern, key: ItemKey, name: string, issues: readonly
       const to = draft.trim()
       if (to === name) return { ok: true, edit: null }
       const problem = checkName(pattern, to, key)
-      return problem ? { ok: false, message: problem.message } : { ok: true, edit: { kind: 'rename', item: key, to } }
+      if (problem) return { ok: false, message: problem.message }
+      const edit: PatternEdit = { kind: 'rename', item: key, to }
+      // Core also refuses a rename it can't apply to every formula safely; say so instead of silently reverting.
+      if (applyEdit(pattern, edit) === pattern) {
+        return { ok: false, message: `Can't rename '${name}' to '${to}' without changing what a formula means` }
+      }
+      return { ok: true, edit }
     }
   }
+}
+
+/** First item per name: duplicates are reported by evaluate, and edits by name only reach the first. */
+const firstByName = <T extends { name: string }>(items: readonly T[]): T[] => {
+  const seen = new Set<string>()
+  return items.filter((item) => !seen.has(item.name) && Boolean(seen.add(item.name)))
 }
 
 const isSelected = (selection: Selection | null, key: ItemKey): boolean => selection !== null && sameItem(selection, key)
@@ -102,7 +115,7 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
     column('name', 'Name'),
     ...pattern.sizes.map((size) => column(size, size, { numeric: true, emphasis: size === pattern.activeSize }))
   ]
-  const rows = pattern.measurements.map((measurement): Row => {
+  const rows = firstByName(pattern.measurements).map((measurement): Row => {
     const key: ItemKey = { kind: 'measurement', name: measurement.name }
     const issues = issuesAbout(resolved, (item) => item.kind === 'measurement' && item.name === measurement.name)
     const valueCells = pattern.sizes.map((size): TextCell => {
@@ -137,7 +150,7 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
 
 export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
   const columns = [column('name', 'Name'), column('formula', 'Formula'), column('value', `Value (${UNIT_LABEL[pattern.units]})`, { numeric: true })]
-  const rows = pattern.variables.map((variable): Row => {
+  const rows = firstByName(pattern.variables).map((variable): Row => {
     const key: ItemKey = { kind: 'variable', name: variable.name }
     const issues = issuesAbout(resolved, (item) => item.kind === 'variable' && item.name === variable.name)
     const value = resolved.variables[variable.name]
