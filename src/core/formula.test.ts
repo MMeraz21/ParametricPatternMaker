@@ -132,6 +132,17 @@ describe('renameReferences', () => {
     expect(renameReferences('chest / 4', 'neck', 'n')).toBe('chest / 4')
   })
 
+  it('handles numbers with a trailing dot and hex literals', () => {
+    expect(renameReferences('2.ease + A.x', 'ease', 'margin')).toBe('2.margin + A.x')
+    // Refused: '2.e2' would read as the number 200.
+    expect(renameReferences('2.ease', 'ease', 'e2')).toBeUndefined()
+    expect(renameReferences('0x1F + x1F', 'x1F', 'q')).toBe('0x1F + q')
+  })
+
+  it('allows renaming onto a name the formula already uses but nothing defines', () => {
+    expect(renameReferences('a + b', 'a', 'b')).toBe('b + b')
+  })
+
   it('still rewrites formulas that do not compile', () => {
     expect(renameReferences('neck +', 'neck', 'n')).toBe('n +')
   })

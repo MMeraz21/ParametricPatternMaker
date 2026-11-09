@@ -133,6 +133,24 @@ describe('piece outlines', () => {
     expect(kinds(evaluate(pattern, 'S').issues)).toEqual(['degenerate-outline'])
   })
 
+  it('treats a nearly flat outline as enclosing no area', () => {
+    // Rounding-level bulge: a real area of 1e-5 mm², far below anything you could cut.
+    const pattern = rectangle({ outline: [{ segmentId: 'ab' }, { segmentId: 'bc' }, { segmentId: 'ca' }] })
+    pattern.points = [
+      { id: 'a', name: 'A', x: '0', y: '0' },
+      { id: 'b', name: 'B', x: '100', y: '0.0000001' },
+      { id: 'c', name: 'C', x: '200', y: '0' }
+    ]
+    pattern.segments = [
+      { id: 'ab', kind: 'line', from: 'a', to: 'b' },
+      { id: 'bc', kind: 'line', from: 'b', to: 'c' },
+      { id: 'ca', kind: 'line', from: 'c', to: 'a' }
+    ]
+    const result = evaluate(pattern, 'S')
+    expect(kinds(result.issues)).toEqual(['degenerate-outline'])
+    expect(result.pieces).toEqual({})
+  })
+
   it('reports duplicate piece ids', () => {
     const pattern = rectangle()
     const [first] = pattern.pieces

@@ -82,9 +82,10 @@ export function Canvas({ scene, onSelect }: CanvasProps) {
           height={viewport.height}
           className="block touch-none select-none"
           onPointerDown={(e) => handlePointer(e, { type: 'down', pointerId: e.pointerId, at: localPoint(e), button: e.button })}
-          onPointerMove={(e) => handlePointer(e, { type: 'move', pointerId: e.pointerId, at: localPoint(e) })}
+          onPointerMove={(e) => handlePointer(e, { type: 'move', pointerId: e.pointerId, at: localPoint(e), buttons: e.buttons })}
           onPointerUp={(e) => handlePointer(e, { type: 'up', pointerId: e.pointerId, at: localPoint(e) })}
           onPointerCancel={(e) => handlePointer(e, { type: 'cancel', pointerId: e.pointerId })}
+          onLostPointerCapture={(e) => handlePointer(e, { type: 'cancel', pointerId: e.pointerId })}
         >
           <g transform={worldTransform(camera, viewport)}>
             {scene.pieces.map((piece) => (

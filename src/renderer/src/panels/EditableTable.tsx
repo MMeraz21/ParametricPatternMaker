@@ -31,9 +31,11 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row) => (
+            {table.rows.map((row, index) => (
               <tr
-                key={row.key.kind === 'point' ? row.key.id : row.key.name}
+                // Points have stable ids. Measurements and variables are keyed by name, which a rename
+                // changes; keying them by position keeps the row (and the cell Tab is moving to) mounted.
+                key={row.key.kind === 'point' ? row.key.id : index}
                 aria-selected={row.selected}
                 onFocus={() => onSelect(row.key)}
                 onClick={() => onSelect(row.key)}

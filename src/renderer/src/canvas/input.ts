@@ -54,7 +54,8 @@ export type PointerGesture =
 
 export type PointerInput =
   | { readonly type: 'down'; readonly pointerId: number; readonly at: Vec2; readonly button: number }
-  | { readonly type: 'move'; readonly pointerId: number; readonly at: Vec2 }
+  /** `buttons` is PointerEvent.buttons: 0 means nothing is held. */
+  | { readonly type: 'move'; readonly pointerId: number; readonly at: Vec2; readonly buttons: number }
   | { readonly type: 'up'; readonly pointerId: number; readonly at: Vec2 }
   | { readonly type: 'cancel'; readonly pointerId: number }
 
@@ -84,6 +85,8 @@ export function stepPointer(gesture: PointerGesture, input: PointerInput): Point
 
   switch (input.type) {
     case 'move': {
+      // No button held means the press is over, even if the release never reached us.
+      if (input.buttons === 0) return { gesture: idleGesture, output: NONE }
       if (gesture.mode === 'pending') {
         if (distance(gesture.down, input.at) < CLICK_SLOP_PX) return { gesture, output: NONE }
         const delta = { x: input.at.x - gesture.down.x, y: input.at.y - gesture.down.y }

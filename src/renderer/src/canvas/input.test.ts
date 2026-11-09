@@ -31,7 +31,7 @@ describe('stepPointer', () => {
     expect(
       run([
         { type: 'down', pointerId: 1, at: { x: 10, y: 10 }, button: 0 },
-        { type: 'move', pointerId: 1, at: { x: 11, y: 11 } },
+        { type: 'move', pointerId: 1, at: { x: 11, y: 11 }, buttons: 1 },
         { type: 'up', pointerId: 1, at: { x: 11, y: 11 } }
       ])
     ).toEqual([{ kind: 'none' }, { kind: 'none' }, { kind: 'click', at: { x: 10, y: 10 } }])
@@ -41,8 +41,8 @@ describe('stepPointer', () => {
     expect(
       run([
         { type: 'down', pointerId: 1, at: { x: 10, y: 10 }, button: 0 },
-        { type: 'move', pointerId: 1, at: { x: 20, y: 10 } },
-        { type: 'move', pointerId: 1, at: { x: 25, y: 13 } },
+        { type: 'move', pointerId: 1, at: { x: 20, y: 10 }, buttons: 1 },
+        { type: 'move', pointerId: 1, at: { x: 25, y: 13 }, buttons: 1 },
         { type: 'up', pointerId: 1, at: { x: 25, y: 13 } }
       ])
     ).toEqual([{ kind: 'none' }, { kind: 'pan', delta: { x: 10, y: 0 } }, { kind: 'pan', delta: { x: 5, y: 3 } }, { kind: 'none' }])
@@ -52,10 +52,33 @@ describe('stepPointer', () => {
     expect(
       run([
         { type: 'down', pointerId: 1, at: { x: 0, y: 0 }, button: 1 },
-        { type: 'move', pointerId: 2, at: { x: 50, y: 50 } },
-        { type: 'move', pointerId: 1, at: { x: 1, y: 0 } }
+        { type: 'move', pointerId: 2, at: { x: 50, y: 50 }, buttons: 1 },
+        { type: 'move', pointerId: 1, at: { x: 1, y: 0 }, buttons: 1 }
       ])
     ).toEqual([{ kind: 'none' }, { kind: 'none' }, { kind: 'pan', delta: { x: 1, y: 0 } }])
+  })
+
+  it('ends a drag when a move reports no buttons held, so hovering can never pan', () => {
+    expect(
+      run([
+        { type: 'down', pointerId: 1, at: { x: 0, y: 0 }, button: 0 },
+        { type: 'move', pointerId: 1, at: { x: 10, y: 0 }, buttons: 1 },
+        // The release was never delivered (focus moved mid-drag), or another input moved the pointer.
+        { type: 'move', pointerId: 1, at: { x: 500, y: 300 }, buttons: 0 },
+        { type: 'move', pointerId: 1, at: { x: 520, y: 300 }, buttons: 0 },
+        { type: 'up', pointerId: 1, at: { x: 520, y: 300 } }
+      ])
+    ).toEqual([{ kind: 'none' }, { kind: 'pan', delta: { x: 10, y: 0 } }, { kind: 'none' }, { kind: 'none' }, { kind: 'none' }])
+  })
+
+  it('does not click when the press ended without a release', () => {
+    expect(
+      run([
+        { type: 'down', pointerId: 1, at: { x: 0, y: 0 }, button: 0 },
+        { type: 'move', pointerId: 1, at: { x: 0, y: 0 }, buttons: 0 },
+        { type: 'up', pointerId: 1, at: { x: 0, y: 0 } }
+      ])
+    ).toEqual([{ kind: 'none' }, { kind: 'none' }, { kind: 'none' }])
   })
 
   it('drops a cancelled press without clicking', () => {

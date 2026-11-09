@@ -58,6 +58,20 @@ export const norm = (a: Vec2): number => Math.hypot(a.x, a.y)
 export const distance = (a: Vec2, b: Vec2): number => Math.hypot(b.x - a.x, b.y - a.y)
 const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
 
+/** The points that define a curve: from, [c1, c2,] to. The curve lies inside their convex hull. */
+export function curvePoints(curve: Curve): Vec2[] {
+  switch (curve.kind) {
+    case 'line':
+      return [curve.from, curve.to]
+    case 'cubic':
+      return [curve.from, curve.c1, curve.c2, curve.to]
+    default: {
+      const _exhaustive: never = curve
+      return _exhaustive
+    }
+  }
+}
+
 /** Position at parameter t (de Casteljau for cubics). */
 export function pointAt(curve: Curve, t: number): Vec2 {
   switch (curve.kind) {

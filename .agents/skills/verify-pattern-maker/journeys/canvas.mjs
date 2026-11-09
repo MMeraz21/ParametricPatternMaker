@@ -78,6 +78,18 @@ export default async function canvas({ window, evidence, rendererErrors }) {
   await window.waitForTimeout(100)
   const hpsAfterWheel = await centre('HPS')
   evidence.check('canvas-pan: plain wheel pans up', hpsAfterWheel.y - hpsAfterDrag.y, (dy) => near(dy, -50))
+
+  // canvas-pan: a move reporting no button held ends the drag (the release was lost, e.g. Cmd-Tab mid-drag).
+  await window.mouse.move(empty.x, empty.y)
+  await window.mouse.down()
+  await window.mouse.move(empty.x - 20, empty.y, { steps: 2 })
+  const hpsMidDrag = await centre('HPS')
+  await canvasEl.evaluate((svg, at) => {
+    svg.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, pointerType: 'mouse', buttons: 0, clientX: at.x, clientY: at.y, bubbles: true }))
+  }, { x: 200, y: 200 })
+  await window.mouse.move(empty.x - 80, empty.y, { steps: 3 })
+  await window.mouse.up()
+  evidence.check('canvas-pan: a move with no button held ends the drag', dist(await centre('HPS'), hpsMidDrag), (d) => d <= 1)
   await window.getByRole('button', { name: 'Fit' }).click()
 
   // canvas-select
