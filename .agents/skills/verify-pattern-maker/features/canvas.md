@@ -11,7 +11,7 @@ list.
 - `canvas-render` draws the Front piece, its 5 points and 4 control points, with `Issues (0)`.
 - `canvas-fit` fits the whole pattern inside the canvas on launch and again with `Fit`.
 - `canvas-zoom` zooms with the `Zoom in` / `Zoom out` buttons and with pinch or ctrl+wheel, keeping the point under the cursor fixed.
-- `canvas-pan` pans by dragging empty canvas and with a plain wheel or two-finger scroll.
+- `canvas-pan` pans by dragging empty canvas and with a plain wheel or two-finger scroll; a drag ends if a move reports no button held.
 - `canvas-constant-size` keeps markers the same on-screen size at every zoom.
 - `canvas-select` selects a point by clicking it, shows its formulas and values, and clears when you click empty canvas.
 - `canvas-edit` commits a formula on Enter, moving the point and the points that depend on it; Escape reverts a draft.
@@ -50,6 +50,7 @@ Preconditions:
 
 ## Gotchas
 
+- The real cursor can send mouse events with the same pointer id as Playwright's. The runner reduces this with `setIgnoreMouseEvents`, but a rare `canvas-pan: drag moves content` failure showing a short pan (for example `-24, -16`) was still seen once in 145 runs, cause unconfirmed. Rerun it; a repeatable failure is a real bug.
 - Click the marker's `circle`, not the marker button: the button's box includes its label, so its centre can be over 10 px from the point and miss the pick.
 - The camera fits on the first resize. Wait for a marker to be visible before measuring.
 - Zoom and pan are animated by nothing: measure right after the action, but re-read boxes after every action.

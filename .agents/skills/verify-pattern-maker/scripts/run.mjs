@@ -119,6 +119,9 @@ try {
   app.process().stderr?.pipe(mainLog)
 
   const window = await app.firstWindow()
+  // The window is on screen, so the real cursor would send mouse events alongside Playwright's and
+  // disturb drags. Injected input doesn't go through the OS, so it still reaches the page.
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((win) => win.setIgnoreMouseEvents(true)))
   window.on('console', (msg) => {
     rendererLog.write(`[${msg.type()}] ${msg.text()}\n`)
     if (msg.type() === 'error') rendererErrors.push(msg.text())

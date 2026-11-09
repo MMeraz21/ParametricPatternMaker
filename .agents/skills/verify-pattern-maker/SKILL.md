@@ -99,4 +99,5 @@ only that PID. Leftover profiles are `$TMPDIR/ppm-verify-*`.
 Each run uses its own profile and launches from `out/`, with no dev server or port, so it can run
 while the user has `npm run dev` open, and two runs can go side by side. `npm run build` rewrites
 `out/`, so don't start a build while another run is launching; use `--no-build` for the second.
-The app window appears on screen while a run is in progress and may take focus briefly.
+The app window appears on screen while a run is in progress and may take focus briefly. The runner makes the window
+ignore the real mouse (`setIgnoreMouseEvents`), which makes interference from your cursor much less likely.
