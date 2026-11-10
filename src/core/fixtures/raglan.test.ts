@@ -4,7 +4,7 @@ import { evaluate } from '../evaluate'
 import { add, derivativeAt, distance, flatten, norm, pointAt, scale, signedArea, type Vec2 } from '../geometry'
 import type { ResolvedPiece } from '../outline'
 import { areaOutside, ringIsSimple } from '../ringUnion'
-import { raglanTee } from './raglan'
+import { raglanFailingInXXL, raglanTee } from './raglan'
 
 /**
  * The raglan as the milestone 5 acceptance test. docs/design/m5-pieces.md says what each check asserts.
@@ -183,5 +183,31 @@ describe('raglan tee fixture', () => {
     it('gives deep-equal cut lines from two evaluate calls', () => {
       expect(resolvedFor('L').pieces).toEqual(resolvedFor('L').pieces)
     })
+  })
+})
+
+describe('raglan failing only in XXL', () => {
+  it.each(['S', 'M', 'L', 'XL'])('has every piece, cut line and no issues in size %s', (size) => {
+    const resolved = evaluate(raglanFailingInXXL, size)
+    expect(resolved.issues).toEqual([])
+    expect(Object.values(resolved.pieces).map((piece) => [piece.id, piece.cutLine !== undefined])).toEqual([
+      ['front', true],
+      ['back', true],
+      ['sleeve', true],
+      ['neckband', true]
+    ])
+  })
+
+  it('loses the Neckband outline and the Front cut line in XXL, and nothing else', () => {
+    const resolved = evaluate(raglanFailingInXXL, 'XXL')
+    expect(resolved.issues.map((issue) => (issue.kind === 'unknown-size' ? issue.kind : [issue.kind, issue.item]))).toEqual([
+      ['cut-line-failed', { kind: 'piece', id: 'front', name: 'Front' }],
+      ['degenerate-outline', { kind: 'piece', id: 'neckband', name: 'Neckband' }]
+    ])
+    expect(Object.values(resolved.pieces).map((piece) => [piece.id, piece.cutLine !== undefined])).toEqual([
+      ['front', false],
+      ['back', true],
+      ['sleeve', true]
+    ])
   })
 })
