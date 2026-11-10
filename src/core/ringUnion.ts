@@ -10,8 +10,11 @@ import type { Vec2 } from './geometry'
 const GRID = 1000
 
 export type RingVertexOrigin =
-  /** The input vertex at `index`. Consecutive vertices on one grid point are merged and report the first. */
-  | { readonly kind: 'input'; readonly index: number }
+  /**
+   * Input vertices `first` to `last`, merged because they land on one grid point; they're equal unless a
+   * merge happened. The output segment arriving here is input segment first - 1, and the one leaving is `last`.
+   */
+  | { readonly kind: 'input'; readonly first: number; readonly last: number }
   /** Where two input segments cross, ascending. Segment i runs from vertex i to vertex i + 1. */
   | { readonly kind: 'crossing'; readonly segments: readonly [number, number] }
 
@@ -74,11 +77,6 @@ function mergeRepeats(grid: Path64): MergedRing {
   return { path, firstInput, lastInput }
 }
 
-/** True when the two points land on one grid point, so a segment between them has no length. */
-export function onSameGridPoint(a: Vec2, b: Vec2): boolean {
-  return Math.round(a.x * GRID) === Math.round(b.x * GRID) && Math.round(a.y * GRID) === Math.round(b.y * GRID)
-}
-
 /** Twice the signed area of a grid path, exactly: 100 m is 1e8 grid units, whose products overflow a double. */
 function doubledArea(path: Path64): bigint {
   let sum = 0n
@@ -91,14 +89,10 @@ function doubledArea(path: Path64): bigint {
 
 const absolute = (value: bigint): bigint => (value < 0n ? -value : value)
 
-/** The input segment an edge of the merged path came from. */
-function inputSegment(merged: MergedRing, a: Point64, b: Point64): number {
-  const count = merged.path.length
-  const [from, to] = [(a.z ?? 0) - 1, (b.z ?? 0) - 1]
-  const lower = (from + 1) % count === to ? from : (to + 1) % count === from ? to : undefined
-  const segment = lower === undefined ? undefined : merged.lastInput[lower]
-  if (segment === undefined) throw new Error('a crossing is on an edge that is not in the ring')
-  return segment
+/** The input segments that meet at a vertex of the merged path: the one leaving it and the one arriving. */
+function segmentsAtVertex(merged: MergedRing, inputCount: number, z: number): readonly number[] {
+  const [first, last] = [merged.firstInput[z - 1], merged.lastInput[z - 1]]
+  return first === undefined || last === undefined ? [] : [last, (first - 1 + inputCount) % inputCount]
 }
 
 /** Positive-winding union of one closed ring, orientation normalised, on a 1 micrometre grid. Rings keep the input's direction. */
@@ -113,8 +107,15 @@ export function unionRing(ring: readonly Vec2[]): UnionResult {
     // z values below zero are crossings, indexing this list from the back: -1 is crossings[0].
     const crossings: (readonly [number, number])[] = []
     const union = new Clipper64()
+    const segmentsAt = ({ z = 0 }: Point64): readonly number[] => (z < 0 ? (crossings[-z - 1] ?? []) : segmentsAtVertex(merged, grid.length, z))
+    // Usually two input edges, but the library also reports crossings between points of its own output, whose
+    // ends can be crossings or vertices that aren't neighbours. The segment they share is the one this edge lies on.
+    const edgeSegment = (a: Point64, b: Point64): number => {
+      const [atA, atB] = [segmentsAt(a), segmentsAt(b)]
+      return atA.find((segment) => atB.includes(segment)) ?? atA[0] ?? atB[0] ?? 0
+    }
     union.zCallback = (bot1, top1, bot2, top2, point) => {
-      const [first, second] = [inputSegment(merged, bot1, top1), inputSegment(merged, bot2, top2)]
+      const [first, second] = [edgeSegment(bot1, top1), edgeSegment(bot2, top2)]
       crossings.push(first < second ? [first, second] : [second, first])
       point.z = -crossings.length
     }
@@ -123,8 +124,8 @@ export function unionRing(ring: readonly Vec2[]): UnionResult {
     union.execute(ClipType.Union, area > 0n ? FillRule.Positive : FillRule.Negative, out)
 
     const originOf = ({ z = 0 }: Point64): RingVertexOrigin => {
-      const index = z > 0 ? merged.firstInput[z - 1] : undefined
-      if (index !== undefined) return { kind: 'input', index }
+      const [first, last] = z > 0 ? [merged.firstInput[z - 1], merged.lastInput[z - 1]] : []
+      if (first !== undefined && last !== undefined) return { kind: 'input', first, last }
       const segments = z < 0 ? crossings[-z - 1] : undefined
       if (segments) return { kind: 'crossing', segments }
       throw new Error('the union produced a vertex with no origin')

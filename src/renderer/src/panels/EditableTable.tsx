@@ -10,6 +10,7 @@ interface EditableTableProps {
 
 /** Renders any TableModel. Knows nothing about what its rows are. */
 export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
+  const { add } = table
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-auto">
@@ -57,6 +58,8 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
                   <button
                     type="button"
                     aria-label={`Delete ${row.name}`}
+                    // Selecting on focus can reflow the dock mid-press, moving this button out from under the click.
+                    onFocus={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation()
                       onEdit(row.remove)
@@ -71,11 +74,13 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
           </tbody>
         </table>
       </div>
-      <div className="border-t border-neutral-200 p-1">
-        <button type="button" onClick={() => onEdit(table.add.edit)} className="rounded px-2 py-0.5 text-sm text-sky-700 hover:bg-sky-50">
-          + {table.add.label}
-        </button>
-      </div>
+      {add && (
+        <div className="border-t border-neutral-200 p-1">
+          <button type="button" onClick={() => onEdit(add.edit)} className="rounded px-2 py-0.5 text-sm text-sky-700 hover:bg-sky-50">
+            + {add.label}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

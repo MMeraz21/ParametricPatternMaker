@@ -2,10 +2,12 @@ import {
   UNIT_LABEL,
   applyEdit,
   checkName,
+  freshId,
   formatLength,
   toMm,
   newItem,
   sameItem,
+  withoutOverride,
   type EvaluationIssue,
   type ItemKey,
   type ItemKind,
@@ -68,11 +70,14 @@ export interface Row {
 }
 
 export interface TableModel {
+  /** Stable across renames, and different for each piece's tables, so a draft can't carry between them. */
+  readonly id: string
   readonly kind: ItemKind
   readonly title: string
   readonly columns: readonly Column[]
   readonly rows: readonly Row[]
-  readonly add: { readonly label: string; readonly edit: PatternEdit }
+  /** Null when there's nothing valid to add yet. */
+  readonly add: { readonly label: string; readonly edit: PatternEdit } | null
 }
 
 const column = (id: string, header: string, options: Partial<Pick<Column, 'numeric' | 'emphasis'>> = {}): Column => ({
@@ -153,7 +158,7 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
       remove: { kind: 'remove', item: key }
     }
   })
-  return { kind: 'measurement', title: `Measurements (${UNIT_LABEL[pattern.units]})`, columns, rows, add: { label: 'Add measurement', edit: { kind: 'add', item: newItem(pattern, 'measurement') } } }
+  return { id: 'measurement', kind: 'measurement', title: `Measurements (${UNIT_LABEL[pattern.units]})`, columns, rows, add: { label: 'Add measurement', edit: { kind: 'add', item: newItem(pattern, 'measurement') } } }
 }
 
 export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
@@ -185,7 +190,7 @@ export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selec
       remove: { kind: 'remove', item: key }
     }
   })
-  return { kind: 'variable', title: 'Variables', columns, rows, add: { label: 'Add variable', edit: { kind: 'add', item: newItem(pattern, 'variable') } } }
+  return { id: 'variable', kind: 'variable', title: 'Variables', columns, rows, add: { label: 'Add variable', edit: { kind: 'add', item: newItem(pattern, 'variable') } } }
 }
 
 export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
@@ -218,7 +223,7 @@ export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selectio
       remove: { kind: 'remove', item: key }
     })
   }
-  return { kind: 'point', title: 'Points', columns, rows, add: { label: 'Add point', edit: { kind: 'add', item: newItem(pattern, 'point') } } }
+  return { id: 'point', kind: 'point', title: 'Points', columns, rows, add: { label: 'Add point', edit: { kind: 'add', item: newItem(pattern, 'point') } } }
 }
 
 const pointLabel = (pattern: Pattern, id: string): string => pattern.points.find((point) => point.id === id)?.name ?? id
@@ -284,7 +289,7 @@ export function segmentTable(pattern: Pattern, resolved: ResolvedPattern, select
       remove: { kind: 'remove', item: key }
     })
   }
-  return { kind: 'segment', title: 'Segments', columns, rows, add: { label: 'Add segment', edit: { kind: 'add', item: newItem(pattern, 'segment') } } }
+  return { id: 'segment', kind: 'segment', title: 'Segments', columns, rows, add: { label: 'Add segment', edit: { kind: 'add', item: newItem(pattern, 'segment') } } }
 }
 
 const setPiece = (piece: Piece, patch: PiecePatch): PatternEdit => ({ kind: 'setPiece', pieceId: piece.id, patch })
@@ -363,17 +368,7 @@ export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selectio
       remove: { kind: 'remove', item: key }
     })
   }
-  return { kind: 'piece', title: 'Pieces', columns, rows, add: { label: 'Add piece', edit: { kind: 'add', item: newItem(pattern, 'piece') } } }
-}
-
-/** The piece's allowance with the override on `from` moved to `to`, or dropped when `to` is absent. */
-function moveOverride(piece: Piece, from: string, to?: string): Piece['seamAllowance'] {
-  const { default: width, perEdge = {} } = piece.seamAllowance
-  const entries = Object.entries(perEdge).flatMap(([id, formula]): [string, string][] => {
-    if (id !== from) return [[id, formula]]
-    return to === undefined ? [] : [[to, formula]]
-  })
-  return entries.length > 0 ? { default: width, perEdge: Object.fromEntries(entries) } : { default: width }
+  return { id: 'piece', kind: 'piece', title: 'Pieces', columns, rows, add: { label: 'Add piece', edit: { kind: 'add', item: newItem(pattern, 'piece') } } }
 }
 
 export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Piece): TableModel {
@@ -382,9 +377,8 @@ export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Pi
   const perEdge = piece.seamAllowance.perEdge ?? {}
   const rows = piece.outline.map((edge, index): Row => {
     const { segmentId } = edge
-    const hasOverride = Object.hasOwn(perEdge, segmentId)
-    const setOutline = (next: Piece['outline'][number]): Piece['outline'] => piece.outline.with(index, next)
-    const length = resolved.segments[segmentId]?.length
+    const override = Object.hasOwn(perEdge, segmentId) ? perEdge[segmentId] : undefined
+    const length = Object.hasOwn(resolved.segments, segmentId) ? resolved.segments[segmentId]?.length : undefined
     return {
       id: String(index),
       key,
@@ -394,38 +388,38 @@ export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Pi
         pieceCell('segment', `${segmentId} segment`, segmentId, [], (draft) => {
           const to = draft.trim()
           if (!pattern.segments.some((segment) => segment.id === to)) return { ok: false, message: `No segment with id '${to}'` }
-          const outline = setOutline({ ...edge, segmentId: to })
-          // An override keeps following its edge. Left behind, it would have no row to clear it from.
-          return { ok: true, edit: setPiece(piece, hasOverride ? { outline, seamAllowance: moveOverride(piece, segmentId, to) } : { outline }) }
+          if (hasEdge(piece, to)) return { ok: false, message: `'${to}' is already an edge of ${piece.name}` }
+          return { ok: true, edit: { kind: 'retargetEdge', pieceId: piece.id, index, segmentId: to } }
         }),
         pieceCell('reversed', `${segmentId} reversed`, edge.reversed ? 'yes' : 'no', [], (draft) => {
           const answer = draft.trim()
           if (answer !== 'yes' && answer !== 'no') return { ok: false, message: "Reversed is 'yes' or 'no'" }
           if ((answer === 'yes') === (edge.reversed ?? false)) return { ok: true, edit: null }
-          return { ok: true, edit: setPiece(piece, { outline: setOutline({ ...edge, reversed: answer === 'yes' }) }) }
+          return { ok: true, edit: setPiece(piece, { outline: piece.outline.with(index, { ...edge, reversed: answer === 'yes' }) }) }
         }),
         pieceCell(
           'allowance',
           `${segmentId} allowance`,
-          perEdge[segmentId] ?? '',
+          override ?? '',
           issuesAbout(resolved, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === segmentId),
           (draft) => {
-            const seamAllowance = draft.trim() === '' ? moveOverride(piece, segmentId) : { ...piece.seamAllowance, perEdge: { ...perEdge, [segmentId]: draft } }
+            const seamAllowance = draft.trim() === '' ? withoutOverride(piece.seamAllowance, segmentId) : { ...piece.seamAllowance, perEdge: { ...perEdge, [segmentId]: draft } }
             return { ok: true, edit: setPiece(piece, { seamAllowance }) }
           }
         ),
         { kind: 'readout', columnId: 'length', label: `${segmentId} length`, text: length === undefined ? null : formatLength(length, pattern.units) }
       ],
-      remove: setPiece(piece, hasOverride ? { outline: piece.outline.toSpliced(index, 1), seamAllowance: moveOverride(piece, segmentId) } : { outline: piece.outline.toSpliced(index, 1) })
+      remove: { kind: 'removeEdge', pieceId: piece.id, index }
     }
   })
   const unused = pattern.segments.find((segment) => !hasEdge(piece, segment.id)) ?? pattern.segments[0]
   return {
+    id: `edges:${piece.id}`,
     kind: 'piece',
     title: `Edges of ${piece.name}`,
     columns,
     rows,
-    add: { label: 'Add edge', edit: setPiece(piece, { outline: [...piece.outline, { segmentId: unused?.id ?? 'segment' }] }) }
+    add: unused ? { label: 'Add edge', edit: setPiece(piece, { outline: [...piece.outline, { segmentId: unused.id }] }) } : null
   }
 }
 
@@ -455,10 +449,12 @@ export function notchTable(pattern: Pattern, resolved: ResolvedPattern, piece: P
       remove: setPiece(piece, { notches: piece.notches.toSpliced(index, 1) })
     }
   })
-  let n = 1
-  while (piece.notches.some((notch) => notch.id === `n${n}`)) n++
-  const add = setPiece(piece, { notches: [...piece.notches, { id: `n${n}`, segmentId: piece.outline[0]?.segmentId ?? '', distance: '0' }] })
-  return { kind: 'piece', title: `Notches of ${piece.name}`, columns, rows, add: { label: 'Add notch', edit: add } }
+  // A notch has to sit on an edge, so a piece with no outline can't have one yet.
+  const firstEdge = piece.outline[0]
+  const add = firstEdge
+    ? { label: 'Add notch', edit: setPiece(piece, { notches: [...piece.notches, { id: freshId('n', piece.notches).id, segmentId: firstEdge.segmentId, distance: '0' }] }) }
+    : null
+  return { id: `notches:${piece.id}`, kind: 'piece', title: `Notches of ${piece.name}`, columns, rows, add }
 }
 
 /** The tables a tab shows. The Pieces tab grows the selected piece's edges and notches. */

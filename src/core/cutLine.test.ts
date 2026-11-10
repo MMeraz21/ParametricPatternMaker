@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildCutLine, type CutLine, type CutSpan, type EdgeAllowance } from './cutLine'
+import { buildCutLine, chordOwner, type CutLine, type CutSpan, type EdgeAllowance } from './cutLine'
 import { curveLength, signedArea, vec, type Curve, type Vec2 } from './geometry'
 import type { Orientation } from './outline'
+import type { UnionVertex } from './ringUnion'
 
 type Xy = [number, number]
 
@@ -203,6 +204,33 @@ describe('buildCutLine corners', () => {
 
 const distanceFromTip = ({ x, y }: Vec2): number => Math.hypot(x - 200, y)
 
+describe('buildCutLine does not depend on where the outline starts', () => {
+  const rotate = <T>(items: readonly T[], by: number): T[] => [...items.slice(by), ...items.slice(0, by)]
+  const trapezoid = (): EdgeAllowance[] => polygon([[0, 0], [200, 0], [150, 80], [50, 80]], [10, 0, 10, 0])
+
+  it.each([0, 1, 2, 3])('lands both ends of an edge between two zero edges, starting from edge %d', (start) => {
+    expect(canonical(build(rotate(trapezoid(), start)).ring)).toEqual([[-6.25, -10], [206.25, -10], [143.75, 90], [56.25, 90]])
+  })
+
+  it.each([0, 1, 2, 3])('gives the same result the other way round, starting from edge %d', (start) => {
+    expect(canonical(build(rotate(reversedOutline(trapezoid()), start)).ring)).toEqual([[-6.25, -10], [206.25, -10], [143.75, 90], [56.25, 90]])
+  })
+})
+
+describe('chordOwner', () => {
+  const crossing = (first: number, second: number): UnionVertex => ({ point: vec(0, 0), origin: { kind: 'crossing', segments: [first, second] } })
+
+  it('prefers the raw segment both ends lie on, over an owner they happen to share', () => {
+    // Segment 5 is a connector. Segments 0 and 1 belong to edge 2, so both ends also touch that edge.
+    const owners = [2, 2, 3, 3, 3, -1]
+    expect(chordOwner(crossing(0, 5), crossing(5, 1), owners)).toBe(-1)
+  })
+
+  it('falls back to a shared owner when the ends lie on no common segment', () => {
+    expect(chordOwner(crossing(0, 2), crossing(1, 3), [7, 7, 8, 9])).toBe(7)
+  })
+})
+
 describe('buildCutLine failures', () => {
   function failureOf(edges: readonly EdgeAllowance[], fold?: string): unknown {
     const result = buildCutLine(edges, orientationOf(edges), fold)
@@ -264,6 +292,16 @@ describe('buildCutLine failures', () => {
       expect(failureOf(wind(edges))).toEqual({ kind: 'cusp', segmentId: 'cusp' })
     })
 
+    it('follows a cusp exactly when its allowance is zero', () => {
+      const edges = [
+        edgeOf('cusp', { kind: 'cubic', from: vec(0, 0), c1: vec(100, 100), c2: vec(0, 100), to: vec(100, 0) }, 0),
+        edgeOf('r', lineCurve(vec(100, 0), vec(100, -100)), 10),
+        edgeOf('b', lineCurve(vec(100, -100), vec(0, -100)), 10),
+        edgeOf('l', lineCurve(vec(0, -100), vec(0, 0)), 10)
+      ]
+      expect(failureOf(wind(edges))).toBe('built')
+    })
+
     it('reports allowances that close a neck into a hole as a split', () => {
       expect(failureOf(wind(uniform(keyhole, 15)))).toEqual({ kind: 'split', rings: 2 })
     })
@@ -298,6 +336,11 @@ describe('buildCutLine failures', () => {
         const line = build(wind(withTinyEdge(100)))
         expect(edgeIds(line.spans).sort()).toEqual(['e0', 'e2', 'e3', 'e4'])
         expect(canonical(line.ring)).toEqual([[-10, -10], [120, -10], [120, 110], [-10, 110]])
+      })
+
+      it('gets no span when a short diagonal rounds to a single grid point', () => {
+        const line = build(wind(polygon([[0, 0], [100, 0], [100.0009, 0.0009], [100, 100], [0, 100]], [10, 10, 10, 10, 10])))
+        expect(edgeIds(line.spans).sort()).toEqual(['e0', 'e2', 'e3', 'e4'])
       })
 
       it('gets no span below one grid unit, and its neighbours still meet at their own widths', () => {
@@ -370,6 +413,16 @@ describe('buildCutLine failures', () => {
     it('turns a failed simplicity check into engine-failed', async () => {
       const mocked = await withRingUnion({ ringIsSimple: () => ({ ok: false, detail: 'boom' }) })
       expect(failureWith(mocked, square(10))).toEqual({ kind: 'engine-failed', detail: 'boom' })
+    })
+
+    it('allows no seam outside the ring along edges with a real allowance', async () => {
+      const mocked = await withRingUnion({ areaOutside: () => 1 })
+      expect(failureWith(mocked, square(10))).toEqual({ kind: 'source-outside' })
+    })
+
+    it('allows the small sliver a zero edge can leave', async () => {
+      const mocked = await withRingUnion({ areaOutside: () => 1 })
+      expect(failureWith(mocked, square(0))).toBe('built')
     })
 
     it('reports a seam outline escaping the ring', async () => {

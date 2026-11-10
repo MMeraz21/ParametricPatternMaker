@@ -40,9 +40,9 @@ export function PanelDock({ tables, onShowPanel, onEdit, onSelect }: PanelDockPr
       </div>
       {/* Side by side: the dock is short, and a selected piece's tables must show without scrolling. */}
       <div role="tabpanel" aria-label={tables[0]?.title} className={`min-h-0 flex-1 ${tables.length > 1 ? 'grid grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,2fr)] grid-rows-[minmax(0,1fr)] divide-x divide-neutral-200' : ''}`}>
-        {/* Keyed by title so a draft in one table can't reappear in a row of another. */}
+        {/* Keyed by id so a draft in one table can't reappear in a row of another. */}
         {tables.map((table) => (
-          <EditableTable key={table.title} table={table} onEdit={onEdit} onSelect={onSelect} />
+          <EditableTable key={table.id} table={table} onEdit={onEdit} onSelect={onSelect} />
         ))}
       </div>
     </section>

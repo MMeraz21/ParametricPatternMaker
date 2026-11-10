@@ -17,7 +17,7 @@ import {
 } from './geometry'
 import type { Id } from './model'
 import type { Orientation, OutlineEdge } from './outline'
-import { areaOutside, onSameGridPoint, ringIsSimple, unionRing, type UnionVertex } from './ringUnion'
+import { areaOutside, ringIsSimple, unionRing, type UnionVertex } from './ringUnion'
 
 /**
  * The cut line of a piece: each edge offset by its own allowance, corners joined by one ordered rule, and
@@ -29,8 +29,8 @@ export const MITER_LIMIT = 4
 
 /** How far, in mm, a cut line can be from the true offset of its edge in any size. */
 export const CUT_LINE_BOUND = 0.025
-/** One grid unit, in mm. Shorter edges contribute no chain. */
-export const MIN_EDGE_LENGTH = 0.001
+/** In mm. A diagonal edge shorter than this can round to a single grid point, so it contributes no chain. */
+export const MIN_EDGE_LENGTH = 0.0015
 /** How far a notch mark is cut inward from the cut line, in mm. */
 export const NOTCH_MARK_LENGTH = 6
 /** A cut line point may sit this far past the fold, in mm: rounding to the grid moves it by under this. */
@@ -40,8 +40,10 @@ export const FOLD_TOLERANCE = 0.001
 const MAX_COORDINATE = 1e5
 /** An allowance this small, in mm, is a zero edge. */
 const ZERO_ALLOWANCE = 1e-6
-/** Seam area outside the ring allowed per mm of outline, in mm²: the two flattenings of a zero edge differ. */
+/** Seam area outside the ring allowed per mm of edge with next to no allowance, in mm²: the two flattenings there differ. */
 const SEAM_SLIVER_PER_MM = 0.05
+/** An allowance under this, in mm, is thin enough for the seam's flattening to reach past the ring. */
+const THIN_ALLOWANCE = 2 * OFFSET_TOLERANCE
 
 /** A connector parallel to neither edge. Otherwise an owner is the edge's position in the outline. */
 const JOIN = -1
@@ -91,15 +93,20 @@ export type CutLineResult =
   | { readonly ok: true; readonly line: Omit<CutLine, 'notches'> }
   | { readonly ok: false; readonly failure: CutLineFailure }
 
-/** An edge being worked on. Corners may trim `points` and `source` at either end. */
 interface WorkingEdge {
   readonly segmentId: Id
   readonly allowance: number
   readonly curve: Curve
   readonly startDirection: Vec2
   readonly endDirection: Vec2
-  points: readonly Vec2[]
-  source: readonly Vec2[]
+  readonly points: readonly Vec2[]
+  readonly source: readonly Vec2[]
+}
+
+/** Replace a chain's end with `crossing`, dropping this many of its points from that end. */
+interface Trim {
+  readonly crossing: Vec2
+  readonly dropped: number
 }
 
 interface OwnedVertex {
@@ -113,6 +120,8 @@ interface Corner {
   readonly vertices: readonly OwnedVertex[]
   /** Who owns the raw segment that arrives at the second edge's first point. */
   readonly arrivingOwner: number
+  readonly trimEndOfFirst?: Trim
+  readonly trimStartOfSecond?: Trim
 }
 
 /** The unit normal pointing out of a piece, for a unit tangent in outline direction. y is down. */
@@ -137,7 +146,7 @@ function rayExit(origin: Vec2, direction: Vec2, ring: readonly Vec2[]): Vec2 | u
 
 /** Where a seam notch reaches the cut line, and its mark. Every seam notch gets one. */
 export function placeCutNotch(notchId: Id, point: Vec2, outward: Vec2, allowance: number, ring: readonly Vec2[]): CutNotch {
-  // Under one grid unit the ring sits on the seam, so a ray from it would skip to whatever edge is next.
+  // This close, the ring sits on the seam, so a ray from it would skip to whatever edge is next.
   const at = allowance < MIN_EDGE_LENGTH ? point : (rayExit(point, outward, ring) ?? add(point, scale(outward, allowance)))
   return { notchId, at, mark: [at, sub(at, scale(outward, NOTCH_MARK_LENGTH))] }
 }
@@ -149,29 +158,33 @@ function miterPoint(corner: Vec2, nA: Vec2, a: number, nB: Vec2, b: number): Vec
   return add(corner, { x: (a * nB.y - b * nA.y) / determinant, y: (b * nA.x - a * nB.x) / determinant })
 }
 
-function joinCorner(a: WorkingEdge, b: WorkingEdge, ownerA: number, ownerB: number, orientation: Orientation, outward: (tangent: Vec2) => Vec2): Corner {
+/** The rule for where two edges' offsets meet. The first row that matches wins. Never changes its inputs. */
+function joinCorner(a: WorkingEdge, b: WorkingEdge, ownerA: number, ownerB: number, orientation: Orientation): Corner {
   const corner = a.curve.to
   const [tA, tB] = [a.endDirection, b.startDirection]
-  const [nA, nB] = [outward(tA), outward(tB)]
+  const [nA, nB] = [outwardNormal(tA, orientation), outwardNormal(tB, orientation)]
   const connector: Corner = { vertices: [], arrivingOwner: JOIN }
   const [aIsZero, bIsZero] = [a.allowance <= ZERO_ALLOWANCE, b.allowance <= ZERO_ALLOWANCE]
+  // Row 1: two zero edges share the seam vertex.
   if (aIsZero && bIsZero) return { vertices: [], arrivingOwner: ownerB }
 
+  // Row 2: parallel tangents.
   const miter = miterPoint(corner, nA, a.allowance, nB, b.allowance)
   if (!miter) return connector
   const turn = cross(tA, tB)
   const convex = orientation === 'clockwise' ? turn > 0 : turn < 0
+  // Row 3: reflex, through the corner. The union removes the loop this makes.
   if (!convex) return { vertices: [{ point: corner, owner: JOIN }], arrivingOwner: JOIN }
 
   const endOfA = add(corner, scale(nA, a.allowance))
   const startOfB = add(corner, scale(nB, b.allowance))
   const s = dot(sub(miter, endOfA), tA)
   const r = dot(sub(startOfB, miter), tB)
+  // Row 4: both chains extend straight to the miter, clipped at the limit.
   if (s >= -1e-9 && r >= -1e-9) {
     const reach = distance(miter, corner)
     const limit = MITER_LIMIT * Math.max(a.allowance, b.allowance)
     if (reach <= limit) return { vertices: [{ point: miter, owner: ownerA }], arrivingOwner: ownerB }
-    // Clip the tip with a line perpendicular to the miter direction, at the limit.
     const direction = scale(sub(miter, corner), 1 / reach)
     const clip = add(corner, scale(direction, limit))
     const onLine = (start: Vec2, tangent: Vec2): Vec2 => add(start, scale(tangent, dot(sub(clip, start), direction) / dot(tangent, direction)))
@@ -184,22 +197,16 @@ function joinCorner(a: WorkingEdge, b: WorkingEdge, ownerA: number, ownerB: numb
     }
   }
 
+  // Row 5: the non-zero chain shortens to land on the zero edge's line.
   if (aIsZero && r < 0) {
-    const landing = walkToLine(b.points, b.source, corner, nA)
-    if (landing) {
-      b.points = landing.points
-      b.source = landing.source
-      return { vertices: [{ point: landing.crossing, owner: ownerA }], arrivingOwner: ownerB }
-    }
+    const trimStartOfSecond = walkToLine(b.points, b.source, corner, nA)
+    if (trimStartOfSecond) return { vertices: [], arrivingOwner: ownerA, trimStartOfSecond }
   }
   if (bIsZero && s < 0) {
-    const landing = walkToLine(a.points.toReversed(), a.source.toReversed(), corner, nB)
-    if (landing) {
-      a.points = [...landing.points.toReversed(), landing.crossing]
-      a.source = [...landing.source.toReversed(), corner]
-      return { vertices: [], arrivingOwner: ownerB }
-    }
+    const trimEndOfFirst = walkToLine(a.points.toReversed(), a.source.toReversed(), corner, nB)
+    if (trimEndOfFirst) return { vertices: [], arrivingOwner: ownerB, trimEndOfFirst }
   }
+  // Row 6: a connector, so neither edge loses any of its allowance.
   return connector
 }
 
@@ -207,55 +214,55 @@ function joinCorner(a: WorkingEdge, b: WorkingEdge, ownerA: number, ownerB: numb
  * Walk a chain from its start to where it first comes back across the line through `onLine` with normal
  * `normal`. Refuses if the source edge crosses the line before the chain does: then the line isn't a boundary.
  */
-function walkToLine(
-  points: readonly Vec2[],
-  source: readonly Vec2[],
-  onLine: Vec2,
-  normal: Vec2
-): { crossing: Vec2; points: readonly Vec2[]; source: readonly Vec2[] } | undefined {
+function walkToLine(points: readonly Vec2[], source: readonly Vec2[], onLine: Vec2, normal: Vec2): Trim | undefined {
   const side = (point: Vec2): number => dot(normal, sub(point, onLine))
   for (let i = 0; i + 1 < points.length; i++) {
     const [from, to, sourceTo] = [points[i], points[i + 1], source[i + 1]]
     if (!from || !to || !sourceTo || side(sourceTo) > 1e-9) return undefined
     const [before, after] = [side(from), side(to)]
-    if (before > 0 && after <= 0) {
-      const t = before / (before - after)
-      return { crossing: add(from, scale(sub(to, from), t)), points: points.slice(i + 1), source: source.slice(i + 1) }
-    }
+    if (before > 0 && after <= 0) return { crossing: add(from, scale(sub(to, from), before / (before - after))), dropped: i + 1 }
   }
   return undefined
 }
 
+/** Each edge's chain with its corners' trims applied. All corners decide first, so their order can't matter. */
+function trimmedChains(edges: readonly WorkingEdge[], corners: readonly Corner[]): Vec2[][] {
+  return edges.map(({ points }, i) => {
+    const start = corners[(i - 1 + edges.length) % edges.length]?.trimStartOfSecond
+    const end = corners[i]?.trimEndOfFirst
+    const kept = points.slice(start?.dropped ?? 0, points.length - (end?.dropped ?? 0))
+    return [...(start ? [start.crossing] : []), ...kept, ...(end ? [end.crossing] : [])]
+  })
+}
+
 /** The raw ring, and who owns each raw segment (segment k runs from vertex k to vertex k + 1). */
-function assembleRing(edges: readonly WorkingEdge[], corners: readonly Corner[]): { ring: Vec2[]; owners: number[] } {
+function assembleRing(chains: readonly (readonly Vec2[])[], corners: readonly Corner[]): { ring: Vec2[]; owners: number[] } {
   const ring: Vec2[] = []
   const owners: number[] = []
   const push = (point: Vec2, owner: number): void => {
-    const last = ring.at(-1)
-    if (last && onSameGridPoint(last, point)) return
-    if (last) owners.push(owner)
+    if (ring.length > 0) owners.push(owner)
     ring.push(point)
   }
-  edges.forEach((edge, i) => {
-    edge.points.forEach((point, k) => {
-      push(point, k === 0 ? (corners[(i - 1 + edges.length) % edges.length]?.arrivingOwner ?? JOIN) : i)
+  chains.forEach((chain, i) => {
+    chain.forEach((point, k) => {
+      push(point, k === 0 ? (corners[(i - 1 + chains.length) % chains.length]?.arrivingOwner ?? JOIN) : i)
     })
     for (const { point, owner } of corners[i]?.vertices ?? []) push(point, owner)
   })
-  const [first] = ring
-  const last = ring.at(-1)
-  if (first && last && ring.length > 1 && onSameGridPoint(first, last)) ring.pop()
-  else owners.push(corners.at(-1)?.arrivingOwner ?? JOIN)
+  owners.push(corners.at(-1)?.arrivingOwner ?? JOIN)
   return { ring, owners }
 }
 
-/** Who owns the chord from `p` to `q`: the owner both ends have in common, or a join if none. */
-function chordOwner(p: UnionVertex, q: UnionVertex, owners: readonly number[]): number {
+/** Who owns the chord from `p` to `q`: the raw segment both ends lie on, else an owner they share, else a join. */
+export function chordOwner(p: UnionVertex, q: UnionVertex, owners: readonly number[]): number {
   const count = owners.length
-  const leaving = p.origin.kind === 'input' ? [p.origin.index] : p.origin.segments
-  const arriving = q.origin.kind === 'input' ? [(q.origin.index - 1 + count) % count] : q.origin.segments
-  const arrivingOwners = arriving.map((segment) => owners[segment] ?? JOIN)
-  return leaving.map((segment) => owners[segment] ?? JOIN).find((owner) => arrivingOwners.includes(owner)) ?? JOIN
+  const ownerOf = (segment: number): number => owners[segment] ?? JOIN
+  const leaving = p.origin.kind === 'input' ? [p.origin.last] : p.origin.segments
+  const arriving = q.origin.kind === 'input' ? [(q.origin.first - 1 + count) % count] : q.origin.segments
+  const shared = leaving.find((segment) => arriving.includes(segment))
+  if (shared !== undefined) return ownerOf(shared)
+  const arrivingOwners = arriving.map(ownerOf)
+  return leaving.map(ownerOf).find((owner) => arrivingOwners.includes(owner)) ?? JOIN
 }
 
 /** Runs of chords with one owner, starting at the first run of the lowest-numbered edge. */
@@ -321,15 +328,16 @@ export function buildCutLine(input: readonly EdgeAllowance[], orientation: Orien
     const endDirection = endTangent(edge.curve)
     if (!startDirection || !endDirection) continue
     const { points, source, regular } = offsetCurve(edge.curve, allowance, outward)
-    if (!regular) return failed({ kind: 'cusp', segmentId: edge.segmentId })
+    // At zero the chain is the curve itself, so a cusp in it needs no offset.
+    if (!regular && allowance > ZERO_ALLOWANCE) return failed({ kind: 'cusp', segmentId: edge.segmentId })
     edges.push({ segmentId: edge.segmentId, allowance, curve: edge.curve, startDirection, endDirection, points, source })
   }
 
   const corners = edges.map((edge, i) => {
     const j = (i + 1) % edges.length
-    return joinCorner(edge, edges[j] ?? edge, i, j, orientation, outward)
+    return joinCorner(edge, edges[j] ?? edge, i, j, orientation)
   })
-  const { ring, owners } = assembleRing(edges, corners)
+  const { ring, owners } = assembleRing(trimmedChains(edges, corners), corners)
 
   const union = unionRing(ring)
   if (!union.ok) return failed({ kind: 'engine-failed', detail: union.detail })
@@ -347,8 +355,8 @@ export function buildCutLine(input: readonly EdgeAllowance[], orientation: Orien
     if (beyond) return failed({ kind: 'crosses-fold', segmentId: foldEdge.segmentId })
   }
 
-  const perimeter = usable.reduce((sum, { edge }) => sum + edge.length, 0)
-  if (areaOutside(seam, line.ring) > SEAM_SLIVER_PER_MM * perimeter) return failed({ kind: 'source-outside' })
+  const thinLength = usable.reduce((sum, { edge, allowance }) => (allowance < THIN_ALLOWANCE ? sum + edge.length : sum), 0)
+  if (areaOutside(seam, line.ring) > SEAM_SLIVER_PER_MM * thinLength) return failed({ kind: 'source-outside' })
 
   return { ok: true, line }
 }

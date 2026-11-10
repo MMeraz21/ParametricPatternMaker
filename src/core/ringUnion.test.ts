@@ -1,7 +1,7 @@
-import { ClipType, Clipper64, FillRule, PathType, type Path64, type Paths64 } from 'clipper2-ts'
+import { ClipType, Clipper64, FillRule, PathType, type Path64, type Paths64, type Point64 } from 'clipper2-ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { vec, type Vec2 } from './geometry'
-import { areaOutside, onSameGridPoint, ringIsSimple, unionRing, type UnionVertex } from './ringUnion'
+import { areaOutside, ringIsSimple, unionRing, type UnionVertex } from './ringUnion'
 
 const ring = (...coordinates: [number, number][]): Vec2[] => coordinates.map(([x, y]) => vec(x, y))
 
@@ -30,7 +30,7 @@ function singleRing(input: readonly Vec2[]): UnionVertex[] {
   return fromLowestPoint(only)
 }
 
-const input = (x: number, y: number, index: number): UnionVertex => ({ point: vec(x, y), origin: { kind: 'input', index } })
+const input = (x: number, y: number, index: number): UnionVertex => ({ point: vec(x, y), origin: { kind: 'input', first: index, last: index } })
 
 describe('clipper2-ts behaviour we depend on', () => {
   function union(path: Path64, onCrossing?: (point: { z?: number }) => void): Paths64 {
@@ -129,9 +129,9 @@ describe('unionRing', () => {
   })
 
   describe('vertices that land on one grid point', () => {
-    it('merge, and report the first of them', () => {
+    it('merge, and report the first and last of them', () => {
       const vertices = singleRing(ring([0, 0], [100, 0], [100.0001, 0], [100, 100], [0, 100]))
-      expect(vertices.find((v) => v.point.x === 100 && v.point.y === 0)?.origin).toEqual({ kind: 'input', index: 1 })
+      expect(vertices.find((v) => v.point.x === 100 && v.point.y === 0)?.origin).toEqual({ kind: 'input', first: 1, last: 2 })
       expect(vertices).toHaveLength(4)
     })
 
@@ -140,10 +140,10 @@ describe('unionRing', () => {
       expect(singleRing(withRepeat).find((v) => v.origin.kind === 'crossing')?.origin).toEqual({ kind: 'crossing', segments: [2, 5] })
     })
 
-    it('merge across the closing edge of the ring, reporting the first in ring order', () => {
+    it('merge across the closing edge of the ring, reporting them in ring order', () => {
       const vertices = singleRing(ring([0, 0], [100, 0], [100, 100], [0, 100], [0, 0]))
       expect(vertices).toHaveLength(4)
-      expect(vertices[0]).toEqual(input(0, 0, 4))
+      expect(vertices[0]?.origin).toEqual({ kind: 'input', first: 4, last: 0 })
     })
   })
 
@@ -160,14 +160,6 @@ describe('unionRing', () => {
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, 1e300])('fails rather than throws for a coordinate of %d', (bad) => {
     expect(unionRing(ring([0, 0], [bad, 0], [0, 100]))).toMatchObject({ ok: false })
-  })
-})
-
-describe('onSameGridPoint', () => {
-  it('is true within one grid point and false beyond it', () => {
-    expect(onSameGridPoint(vec(1, 1), vec(1.0004, 0.9996))).toBe(true)
-    expect(onSameGridPoint(vec(1, 1), vec(1.002, 1))).toBe(false)
-    expect(onSameGridPoint(vec(1, 1), vec(1, 1.002))).toBe(false)
   })
 })
 
@@ -264,6 +256,24 @@ describe('when the library throws', () => {
     expect(mocked.unionRing(square)).toEqual({ ok: false, detail: 'coordinate overflow' })
     expect(mocked.ringIsSimple(square)).toEqual({ ok: false, detail: 'coordinate overflow' })
     expect(mocked.areaOutside(square, square)).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('copes when the library reports an intersection between points of its own output', async () => {
+    vi.resetModules()
+    vi.doMock('clipper2-ts', async (importOriginal) => {
+      const real = await importOriginal<typeof import('clipper2-ts')>()
+      class SplittingClipper extends real.Clipper64 {
+        // doSplitOp hands the callback output points: crossings, unnumbered points, and vertices that aren't neighbours.
+        override addPaths(...args: Parameters<InstanceType<typeof real.Clipper64>['addPaths']>): void {
+          const at = (z?: number): Point64 => ({ x: 0, y: 0, ...(z === undefined ? {} : { z }) })
+          this.zCallback?.(at(1), at(3), at(-1), at(), at())
+          super.addPaths(...args)
+        }
+      }
+      return { ...real, Clipper64: SplittingClipper }
+    })
+    const mocked = await import('./ringUnion')
+    expect(mocked.unionRing(square)).toMatchObject({ ok: true, rings: [expect.any(Array)] })
   })
 
   it('reports anything else that is thrown as a failure too', async () => {

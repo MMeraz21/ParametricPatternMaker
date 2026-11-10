@@ -1,5 +1,5 @@
 import { isValidName, renameReferences, type Axis } from './formula'
-import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Piece, type Point, type Segment, type SizeName, type Variable } from './model'
+import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Piece, type Point, type SeamAllowance, type Segment, type SizeName, type Variable } from './model'
 
 /**
  * Pattern edits: the one way anything changes a Pattern (panels, inspector, undo and MCP later).
@@ -48,6 +48,10 @@ export type PatternEdit =
   /** Replaces the segment with this id. Refused if there isn't one. */
   | { readonly kind: 'setSegment'; readonly segment: Segment }
   | { readonly kind: 'setPiece'; readonly pieceId: Id; readonly patch: PiecePatch }
+  /** Points an outline edge at another segment. Its override, the fold and its notches go with it. */
+  | { readonly kind: 'retargetEdge'; readonly pieceId: Id; readonly index: number; readonly segmentId: Id }
+  /** Removes an outline edge, with its override, the fold if it was the fold, and its notches. */
+  | { readonly kind: 'removeEdge'; readonly pieceId: Id; readonly index: number }
 
 /** Why a name can't be used. Messages are ready to show. */
 export type NameProblem = { readonly kind: 'invalid' | 'taken'; readonly message: string }
@@ -87,7 +91,7 @@ function uniqueName(pattern: Pattern, base: string): string {
 }
 
 /** The smallest `<prefix><N>` not in `taken`. */
-function freshId(prefix: string, taken: readonly { id: Id }[]): { id: Id; n: number } {
+export function freshId(prefix: string, taken: readonly { id: Id }[]): { id: Id; n: number } {
   const ids = new Set(taken.map((item) => item.id))
   let n = 1
   while (ids.has(`${prefix}${n}`)) n++
@@ -183,13 +187,12 @@ export function applyEdit(pattern: Pattern, edit: PatternEdit): Pattern {
     case 'setPiece': {
       const { cutCount } = edit.patch
       if (cutCount !== undefined && !(Number.isInteger(cutCount) && cutCount > 0)) return pattern
-      const pieces = replaceFirst(
-        pattern.pieces,
-        (p) => p.id === edit.pieceId,
-        (p) => patchPiece(p, edit.patch)
-      )
-      return pieces ? { ...pattern, pieces } : pattern
+      return updatePiece(pattern, edit.pieceId, (piece) => patchPiece(piece, edit.patch))
     }
+    case 'retargetEdge':
+      return updatePiece(pattern, edit.pieceId, (piece) => retargetEdge(piece, edit.index, edit.segmentId))
+    case 'removeEdge':
+      return updatePiece(pattern, edit.pieceId, (piece) => removeEdge(piece, edit.index))
     default: {
       const _exhaustive: never = edit
       return _exhaustive
@@ -197,12 +200,46 @@ export function applyEdit(pattern: Pattern, edit: PatternEdit): Pattern {
   }
 }
 
+function updatePiece(pattern: Pattern, pieceId: Id, update: (piece: Piece) => Piece): Pattern {
+  const pieces = replaceFirst(pattern.pieces, (piece) => piece.id === pieceId, update)
+  return pieces ? { ...pattern, pieces } : pattern
+}
+
 const unchanged = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
 
-function withoutOverride(piece: Piece, segmentId: Id): Piece {
-  const { default: width, perEdge = {} } = piece.seamAllowance
+/** The allowance with one edge's override removed. An empty `perEdge` collapses to just the default. */
+export function withoutOverride(seamAllowance: SeamAllowance, segmentId: Id): SeamAllowance {
+  const { default: width, perEdge = {} } = seamAllowance
   const others = Object.entries(perEdge).filter(([id]) => id !== segmentId)
-  return { ...piece, seamAllowance: others.length > 0 ? { default: width, perEdge: Object.fromEntries(others) } : { default: width } }
+  return others.length > 0 ? { default: width, perEdge: Object.fromEntries(others) } : { default: width }
+}
+
+function retargetEdge(piece: Piece, index: number, to: Id): Piece {
+  const edge = piece.outline[index]
+  if (!edge || piece.outline.some(({ segmentId }) => segmentId === to)) return piece
+  const from = edge.segmentId
+  const { perEdge } = piece.seamAllowance
+  const override = perEdge && Object.hasOwn(perEdge, from) ? perEdge[from] : undefined
+  const remaining = withoutOverride(withoutOverride(piece.seamAllowance, from), to)
+  return {
+    ...piece,
+    outline: piece.outline.with(index, { ...edge, segmentId: to }),
+    seamAllowance: override === undefined ? piece.seamAllowance : { default: remaining.default, perEdge: { ...remaining.perEdge, [to]: override } },
+    notches: piece.notches.map((notch) => (notch.segmentId === from ? { ...notch, segmentId: to } : notch)),
+    ...(piece.fold === from ? { fold: to } : {})
+  }
+}
+
+function removeEdge(piece: Piece, index: number): Piece {
+  const edge = piece.outline[index]
+  if (!edge) return piece
+  const { segmentId } = edge
+  return patchPiece(piece, {
+    outline: piece.outline.toSpliced(index, 1),
+    seamAllowance: withoutOverride(piece.seamAllowance, segmentId),
+    notches: piece.notches.filter((notch) => notch.segmentId !== segmentId),
+    ...(piece.fold === segmentId ? { fold: null } : {})
+  })
 }
 
 function patchPiece(piece: Piece, { fold, ...fields }: PiecePatch): Piece {
@@ -212,7 +249,7 @@ function patchPiece(piece: Piece, { fold, ...fields }: PiecePatch): Piece {
     const { fold: _cleared, ...rest } = patched
     next = rest
   } else if (fold !== undefined) {
-    next = { ...withoutOverride(patched, fold), fold }
+    next = { ...patched, seamAllowance: withoutOverride(patched.seamAllowance, fold), fold }
   }
   return unchanged(next, piece) ? piece : next
 }

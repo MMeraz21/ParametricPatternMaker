@@ -239,6 +239,73 @@ describe('segments and pieces', () => {
   })
 })
 
+describe('retargetEdge and removeEdge', () => {
+  const front = raglanTee.pieces[0]
+  if (!front) throw new Error('raglan has a front')
+  const retarget = (index: number, segmentId: string, pieceId = 'front'): Pattern => applyEdit(raglanTee, { kind: 'retargetEdge', pieceId, index, segmentId })
+  const remove = (index: number, pieceId = 'front'): Pattern => applyEdit(raglanTee, { kind: 'removeEdge', pieceId, index })
+  // In outline order: frontNeck, frontCf (the fold), frontHem (overridden), frontSide, frontRaglan (notched).
+
+  describe('retargetEdge', () => {
+    it('changes the segment and keeps the edge direction', () => {
+      const reversed: Pattern = { ...raglanTee, pieces: [{ ...front, outline: front.outline.with(3, { segmentId: 'frontSide', reversed: true }) }, ...raglanTee.pieces.slice(1)] }
+      expect(applyEdit(reversed, { kind: 'retargetEdge', pieceId: 'front', index: 3, segmentId: 'backNeck' }).pieces[0]?.outline[3]).toEqual({ segmentId: 'backNeck', reversed: true })
+    })
+
+    it('moves the edge override with it', () => {
+      expect(retarget(2, 'backNeck').pieces[0]?.seamAllowance).toEqual({ default: '10', perEdge: { backNeck: '25' } })
+    })
+
+    it('moves the fold with it', () => {
+      expect(retarget(1, 'backCb').pieces[0]?.fold).toBe('backCb')
+      expect(retarget(2, 'backNeck').pieces[0]?.fold).toBe('frontCf')
+    })
+
+    it('moves the notches on it', () => {
+      expect(retarget(4, 'backRaglan').pieces[0]?.notches).toEqual([{ id: 'frontRaglanNotch', segmentId: 'backRaglan', distance: '100' }])
+    })
+
+    it('replaces a leftover override on the new segment', () => {
+      const stale: Pattern = { ...raglanTee, pieces: [{ ...front, seamAllowance: { default: '10', perEdge: { frontHem: '25', backNeck: '3' } } }, ...raglanTee.pieces.slice(1)] }
+      expect(applyEdit(stale, { kind: 'retargetEdge', pieceId: 'front', index: 2, segmentId: 'backNeck' }).pieces[0]?.seamAllowance).toEqual({ default: '10', perEdge: { backNeck: '25' } })
+    })
+
+    it('refuses a segment already in the outline, so no override is lost', () => {
+      expect(retarget(2, 'frontSide')).toBe(raglanTee)
+    })
+
+    it('returns the same pattern for no change, an unknown piece or an index out of range', () => {
+      expect(retarget(2, 'frontHem')).toBe(raglanTee)
+      expect(retarget(2, 'backNeck', 'ghost')).toBe(raglanTee)
+      expect(retarget(99, 'backNeck')).toBe(raglanTee)
+    })
+  })
+
+  describe('removeEdge', () => {
+    it('removes the edge and its override', () => {
+      const next = remove(2).pieces[0]
+      expect(next?.outline.map((edge) => edge.segmentId)).toEqual(['frontNeck', 'frontCf', 'frontSide', 'frontRaglan'])
+      expect(next?.seamAllowance).toEqual({ default: '10' })
+    })
+
+    it('clears the fold when it was the fold edge, and keeps it otherwise', () => {
+      const cleared = remove(1).pieces[0]
+      expect(cleared && 'fold' in cleared).toBe(false)
+      expect(remove(2).pieces[0]?.fold).toBe('frontCf')
+    })
+
+    it('removes the notches on it, and keeps the others', () => {
+      expect(remove(4).pieces[0]?.notches).toEqual([])
+      expect(remove(2).pieces[0]?.notches).toEqual(front.notches)
+    })
+
+    it('returns the same pattern for an unknown piece or an index out of range', () => {
+      expect(remove(0, 'ghost')).toBe(raglanTee)
+      expect(remove(99)).toBe(raglanTee)
+    })
+  })
+})
+
 describe('add and remove', () => {
   it('adds new items with unique names and ids', () => {
     const point = newItem(raglanTee, 'point')

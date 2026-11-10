@@ -9,7 +9,7 @@ describe('the public core API', () => {
     expect(Object.keys(core)).not.toContain(name)
   })
 
-  it.each(['unionRing', 'ringIsSimple', 'areaOutside', 'onSameGridPoint', 'buildCutLine'])('keeps %s internal to the cut line code', (name) => {
+  it.each(['unionRing', 'ringIsSimple', 'areaOutside', 'buildCutLine'])('keeps %s internal to the cut line code', (name) => {
     expect(Object.keys(core)).not.toContain(name)
   })
 

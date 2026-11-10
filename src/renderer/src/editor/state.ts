@@ -65,6 +65,8 @@ function selectionAfter(selection: Selection | null, edit: PatternEdit): Selecti
     case 'setUnits':
     case 'setSegment':
     case 'setPiece':
+    case 'retargetEdge':
+    case 'removeEdge':
       return selection
     default: {
       const _exhaustive: never = edit

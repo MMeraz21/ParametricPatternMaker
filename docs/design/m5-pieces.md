@@ -1,6 +1,6 @@
 # Milestone 5: pieces and seam allowance
 
-Status: design, awaiting review. Nothing here is built except the extended raglan fixture.
+Status: built. The code is the reference for exact signatures. This document records why it has this shape.
 
 ## Problem
 
@@ -159,17 +159,16 @@ export interface OffsetChain {
   readonly regular: boolean
 }
 export function offsetCurve(curve: Curve, distance: number, outward: (tangent: Vec2) => Vec2): OffsetChain {
-  // TODO recursive midpoint split of the cubic. Lines return two points.
+  // Recursive midpoint split of the cubic. Lines return two points.
   // For a sub-cubic:  a = P(t0) + d*N(t0),  b = P(t1) + d*N(t1)
   //   w = width of the cone holding the hodograph vectors (c1-p0, c2-c1, p3-c2)
   //   accept iff w < pi and (|ab| / 2) * tan(w / 2) <= OFFSET_TOLERANCE
   // Vectors under 1e-9 of the largest are skipped, so a control point on its anchor is fine.
   // Cusp: tangents either side of a split disagree (dot < 0.5), or depth 24 is reached. regular = false.
-  throw new Error('not implemented')
 }
-export function startTangent(curve: Curve): Vec2 | undefined { throw new Error('not implemented') }
-export function endTangent(curve: Curve): Vec2 | undefined { throw new Error('not implemented') }
-export function polygonPathData(ring: readonly Vec2[]): string { throw new Error('not implemented') }
+export function startTangent(curve: Curve): Vec2 | undefined
+export function endTangent(curve: Curve): Vec2 | undefined
+export function polygonPathData(ring: readonly Vec2[]): string
 ```
 
 We never offset a polyline. Each vertex of the chain is computed as `P(t) + d·N(t)` on the true curve,
@@ -235,7 +234,7 @@ would be.
 // cutLine.ts
 export const MITER_LIMIT = 4           // × the larger allowance at the corner
 export const CUT_LINE_BOUND = 0.025    // mm
-export const MIN_EDGE_LENGTH = 0.001   // mm, one grid unit; shorter edges contribute no chain
+export const MIN_EDGE_LENGTH = 0.0015  // mm; a shorter diagonal can round to one grid point
 
 export interface EdgeAllowance { readonly edge: OutlineEdge; readonly allowance: number }
 export type CutLineResult =
@@ -244,7 +243,7 @@ export type CutLineResult =
 
 /** Total and pure: every input yields a result. Never throws. */
 export function buildCutLine(edges: readonly EdgeAllowance[], orientation: Orientation, fold?: Id): CutLineResult {
-  // TODO, in order:
+  // In order:
   //  1 range guard on every control point and allowance -> out-of-range
   //  2 drop edges under MIN_EDGE_LENGTH
   //  3 ringIsSimple(flattened source) -> source-self-intersects
@@ -254,7 +253,6 @@ export function buildCutLine(edges: readonly EdgeAllowance[], orientation: Orien
   //  7 unionRing -> split | engine-failed
   //  8 owner of each output chord = owner common to its two endpoint provenances; runs -> spans
   //  9 validity: edge-swallowed, crosses-fold, source-outside
-  throw new Error('not implemented')
 }
 ```
 
@@ -267,7 +265,7 @@ fail in both cases.
 ```ts
 // ringUnion.ts: the only file that knows Clipper2, integers, or fill rules.
 export type RingVertexOrigin =
-  | { readonly kind: 'input'; readonly index: number }
+  | { readonly kind: 'input'; readonly first: number; readonly last: number }
   | { readonly kind: 'crossing'; readonly segments: readonly [number, number] }
 export interface UnionVertex { readonly point: Vec2; readonly origin: RingVertexOrigin }
 export type UnionResult =
@@ -275,11 +273,11 @@ export type UnionResult =
   | { readonly ok: false; readonly detail: string }
 
 /** Positive-winding union of one closed ring, orientation normalised, on a 1 µm grid. */
-export function unionRing(ring: readonly Vec2[]): UnionResult { throw new Error('not implemented') }
+export function unionRing(ring: readonly Vec2[]): UnionResult
 /** Exact on the grid: one ring out, with the same area as the ring in. */
-export function ringIsSimple(ring: readonly Vec2[]): { readonly ok: true; readonly simple: boolean } | { readonly ok: false; readonly detail: string } { throw new Error('not implemented') }
+export function ringIsSimple(ring: readonly Vec2[]): { readonly ok: true; readonly simple: boolean } | { readonly ok: false; readonly detail: string }
 /** Area of `inner` outside `outer`, mm². */
-export function areaOutside(inner: readonly Vec2[], outer: readonly Vec2[]): number { throw new Error('not implemented') }
+export function areaOutside(inner: readonly Vec2[], outer: readonly Vec2[]): number
 ```
 
 - **Package: `clipper2-ts`, pinned exactly at `2.0.1-19`, no caret.** It has no dependencies, a BSL-1.0
@@ -379,7 +377,6 @@ export const PieceSchema = z.object({
 
 /** The one list of every formula a piece owns. evaluate and rename both go through it. */
 export function visitPieceFormulas(piece: Piece, visit: (owner: PieceFormulaOwner, formula: string) => string): Piece {
-  throw new Error('not implemented')
 }
 ```
 
@@ -417,7 +414,9 @@ export type PatternEdit = /* existing six; rename takes NamedItemKey */
 ```
 
 `setPiece` returns the same reference when every patched field is deep-equal, and stays replayable because
-cells compute the whole new array. Setting a fold deletes that edge's override.
+cells compute the whole new array. Setting a fold deletes that edge's override. `retargetEdge` and `removeEdge`
+keep what depends on an edge together: its override, the fold and its notches follow it or go with it, and
+retargeting onto a segment already in the outline is refused so no override can be overwritten.
 
 The UI fits `TableModel`. `ItemKind` gains `segment` and `piece`, giving "Segments" and "Pieces" tabs.
 
@@ -516,7 +515,7 @@ The judge's challenges were checked, not assumed. See the evidence section.
 - We accept a hand-written offset and join rule in core, about 200 lines, in exchange for a stated bound
   in mm and a cut line that keeps edge identity. Clipper offers neither.
 - We accept depending on Clipper's Z channel in a prerelease package, in exchange for exact span ownership
-  with no coordinate matching. Exact pin, one file, five symbols, a behaviour test.
+  with no coordinate matching. Exact pin, one file, four symbols, a behaviour test.
 - We accept omitting the whole cut line on any cut failure, even when an approximate one exists, so that
   `cutLine` present means printable. The seam line still shows.
 - We accept a polygon cut line rather than curves, within 0.021 mm, for one representation across canvas,
@@ -568,8 +567,7 @@ and real `clipper2-ts@2.0.1-19` on Node 24.4.1.
 - **Bundling:** the repo's `rolldown` bundled the package to ESM and CJS at 50 kB, and the CJS bundle ran
   under this repo's Electron in run-as-node mode. Vitest loaded it through a spike config.
 
-Not run: `crosses-fold`, `source-outside` and `invalid-fold-edge` wiring, a single-edge closed outline, and
-formula allowances, `applyEdit` and the UI, which are designed but not prototyped.
+All of these, and the wiring, edits and UI built afterwards, are now covered by the committed tests and the `pieces` journey.
 
 ## Build plan
 

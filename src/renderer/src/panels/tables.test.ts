@@ -60,7 +60,7 @@ describe('measurementTable', () => {
   })
 
   it('offers add and remove edits', () => {
-    expect(table.add.edit).toMatchObject({ kind: 'add', item: { kind: 'measurement', measurement: { name: 'measurement_1' } } })
+    expect(table.add?.edit).toMatchObject({ kind: 'add', item: { kind: 'measurement', measurement: { name: 'measurement_1' } } })
     expect(table.rows[0]?.remove).toEqual({ kind: 'remove', item: { kind: 'measurement', name: 'chest' } })
   })
 
@@ -119,7 +119,7 @@ describe('pointTable', () => {
     expect(table.rows.slice(0, 9).map((r) => r.name)).toEqual(['HPS', 'CFNeck', 'Underarm', 'SideHem', 'CFHem', 'NeckC1', 'NeckC2', 'RaglanC1', 'RaglanC2'])
     expect(text(table, 'HPS', 'x')).toMatchObject({ label: 'HPS x', text: 'neck_width' })
     expect(text(table, 'HPS', 'name').commit('Shoulder')).toEqual({ ok: true, edit: { kind: 'rename', item: { kind: 'point', id: 'hps' }, to: 'Shoulder' } })
-    expect(table.add.edit).toMatchObject({ kind: 'add', item: { kind: 'point', point: { id: 'p1', name: 'P_1' } } })
+    expect(table.add?.edit).toMatchObject({ kind: 'add', item: { kind: 'point', point: { id: 'p1', name: 'P_1' } } })
   })
 })
 
@@ -162,7 +162,7 @@ describe('segmentTable', () => {
   })
 
   it('offers add and remove edits', () => {
-    expect(table.add.edit).toMatchObject({ kind: 'add', item: { kind: 'segment', segment: { id: 's1' } } })
+    expect(table.add?.edit).toMatchObject({ kind: 'add', item: { kind: 'segment', segment: { id: 's1' } } })
     expect(table.rows[0]?.remove).toEqual({ kind: 'remove', item: { kind: 'segment', id: 'frontNeck' } })
   })
 })
@@ -226,7 +226,7 @@ describe('pieceTable', () => {
   })
 
   it('offers add and remove edits', () => {
-    expect(table.add.edit).toMatchObject({ kind: 'add', item: { kind: 'piece', piece: { id: 'piece1' } } })
+    expect(table.add?.edit).toMatchObject({ kind: 'add', item: { kind: 'piece', piece: { id: 'piece1' } } })
     expect(table.rows[0]?.remove).toEqual({ kind: 'remove', item: { kind: 'piece', id: 'front' } })
     expect(table.rows[0]?.key).toEqual({ kind: 'piece', id: 'front' })
   })
@@ -261,13 +261,8 @@ describe('edgeTable', () => {
   })
 
   it('changes the segment of an edge, refusing one that does not exist', () => {
-    const outline = front.outline.map((e) => (e.segmentId === 'frontHem' ? { ...e, segmentId: 'backNeck' } : e))
-    // The override follows the edge, or it would be stranded with no row left to clear it from.
-    expect(text(table, 'frontHem', 'segment').commit('backNeck')).toEqual({
-      ok: true,
-      edit: { kind: 'setPiece', pieceId: 'front', patch: { outline, seamAllowance: { default: '10', perEdge: { backNeck: '25' } } } }
-    })
-    expect(text(table, 'frontSide', 'segment').commit('backNeck')).toMatchObject({ edit: { patch: { outline: expect.any(Array) } } })
+    expect(text(table, 'frontHem', 'segment').commit('backNeck')).toEqual({ ok: true, edit: { kind: 'retargetEdge', pieceId: 'front', index: 2, segmentId: 'backNeck' } })
+    expect(text(table, 'frontHem', 'segment').commit('frontSide')).toEqual({ ok: false, message: "'frontSide' is already an edge of Front" })
     expect(text(table, 'frontHem', 'segment').commit('ghost')).toEqual({ ok: false, message: "No segment with id 'ghost'" })
   })
 
@@ -279,14 +274,21 @@ describe('edgeTable', () => {
   })
 
   it('removes an edge, and adds the first segment not yet used', () => {
-    expect(table.rows[0]?.remove).toEqual({ kind: 'setPiece', pieceId: 'front', patch: { outline: front.outline.slice(1) } })
-    expect(table.add.edit).toEqual({ kind: 'setPiece', pieceId: 'front', patch: { outline: [...front.outline, { segmentId: 'backNeck' }] } })
-    const hem = table.rows.find((r) => r.name === 'frontHem')
-    expect(hem?.remove).toEqual({
-      kind: 'setPiece',
-      pieceId: 'front',
-      patch: { outline: front.outline.filter((e) => e.segmentId !== 'frontHem'), seamAllowance: { default: '10' } }
-    })
+    expect(table.rows[2]?.remove).toEqual({ kind: 'removeEdge', pieceId: 'front', index: 2 })
+    expect(table.add?.edit).toEqual({ kind: 'setPiece', pieceId: 'front', patch: { outline: [...front.outline, { segmentId: 'backNeck' }] } })
+  })
+
+  it('offers no add when there is no segment to add', () => {
+    const empty: Pattern = { ...raglanTee, segments: [] }
+    expect(edgeTable(empty, evaluate(empty, 'M'), front).add).toBeNull()
+  })
+
+  it('reads an override by own property, for a segment id like constructor', () => {
+    const odd = { ...front, outline: [{ segmentId: 'constructor' }], seamAllowance: { default: '10', perEdge: { frontHem: '25' } } }
+    const pattern: Pattern = { ...raglanTee, pieces: [odd] }
+    const t = edgeTable(pattern, evaluate(pattern, 'M'), odd)
+    expect(text(t, 'constructor', 'allowance').text).toBe('')
+    expect(cell(t, 'constructor', 'length')).toMatchObject({ text: null })
   })
 
   it('puts a stale or broken override on its cell', () => {
@@ -318,8 +320,12 @@ describe('notchTable', () => {
   })
 
   it('adds a notch on the first edge with a fresh id, and removes one', () => {
-    expect(table.add.edit).toEqual(patch([notch, { id: 'n1', segmentId: 'frontNeck', distance: '0' }]))
+    expect(table.add?.edit).toEqual(patch([notch, { id: 'n1', segmentId: 'frontNeck', distance: '0' }]))
     expect(table.rows[0]?.remove).toEqual(patch([]))
+  })
+
+  it('offers no add on a piece with no edges, since a notch needs one', () => {
+    expect(notchTable(raglanTee, resolved, { ...front, outline: [] }).add).toBeNull()
   })
 
   it('puts a notch issue on its distance', () => {
@@ -340,6 +346,14 @@ describe('tablesFor', () => {
     expect(tablesFor('piece', raglanTee, resolved, { kind: 'piece', id: 'front' }).map((t) => t.title)).toEqual(['Pieces', 'Edges of Front', 'Notches of Front'])
     expect(tablesFor('piece', raglanTee, resolved, { kind: 'piece', id: 'ghost' }).map((t) => t.title)).toEqual(['Pieces'])
     expect(tablesFor('piece', raglanTee, resolved, { kind: 'point', id: 'hps' }).map((t) => t.title)).toEqual(['Pieces'])
+  })
+
+  it('keeps the tables of two pieces with the same name apart', () => {
+    const twins: Pattern = { ...raglanTee, pieces: raglanTee.pieces.map((p) => ({ ...p, name: 'Twin' })) }
+    const of = (id: string) => tablesFor('piece', twins, evaluate(twins, 'M'), { kind: 'piece', id }).map((t) => t.id)
+    expect(of('front')[1]).not.toBe(of('back')[1])
+    expect(of('front')[2]).not.toBe(of('back')[2])
+    expect(new Set(of('front')).size).toBe(3)
   })
 
   it('gives every row a key unique within its table', () => {

@@ -134,5 +134,12 @@ export default async function pieces({ window, evidence, rendererErrors }) {
   await window.getByRole('button', { name: 'Delete Piece 1', exact: true }).click()
   evidence.check('pieces-add: deleted', await window.getByRole('heading', { name: 'Issues (0)' }).isVisible(), true)
 
+  // pieces-delete: the row isn't selected first, so selecting it must not move the button from under the click.
+  await field('Back name').evaluate((el) => el.blur())
+  evidence.check('pieces-delete: nothing selected yet', await table('Edges of Back').count(), 0)
+  await window.getByRole('button', { name: 'Delete Neckband', exact: true }).click()
+  evidence.check('pieces-delete: an unselected piece is deleted', (await table('Pieces').getByRole('row').count()) - 1, 3)
+  evidence.check('pieces-delete: its drawing is gone', await drawn('Piece Neckband').count(), 0)
+
   evidence.check('pieces-console: no renderer errors', rendererErrors, (errors) => errors.length === 0)
 }

@@ -18,6 +18,7 @@ formulas. Anything that stops a cut line is listed in Issues, and the rest of th
 - `pieces-notch` a notch distance moves its mark; notches can be added and deleted.
 - `pieces-segment` a segment's points are typed by name, a name that doesn't exist is refused, and its kind can change.
 - `pieces-add` a new piece starts selected, reports that it has no outline, and can be deleted.
+- `pieces-delete` the `×` on a piece that isn't selected deletes it on the first click.
 - `pieces-console` produces no renderer errors.
 
 ## How to get to it (user POV)

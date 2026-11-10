@@ -16,7 +16,7 @@ function randomSource(start: number): () => number {
 const ALLOWANCES = [0, 5, 10, 10, 10, 16, 25]
 
 /** A star-ish outline around the origin, so it is usually simple, with each edge a line or a gentle cubic. */
-function randomOutline(random: () => number): EdgeAllowance[] {
+function randomOutline(random: () => number, allowances: readonly number[] = ALLOWANCES): EdgeAllowance[] {
   const count = 3 + Math.floor(random() * 8)
   const corners = Array.from({ length: count }, (_, i): Vec2 => {
     const angle = (2 * Math.PI * i) / count + ((random() - 0.5) * Math.PI) / count / 1.5
@@ -27,7 +27,7 @@ function randomOutline(random: () => number): EdgeAllowance[] {
     const to = corners[(i + 1) % count]
     if (!to) return []
     const [dx, dy] = [to.x - from.x, to.y - from.y]
-    const allowance = ALLOWANCES[Math.floor(random() * ALLOWANCES.length)] ?? 10
+    const allowance = allowances[Math.floor(random() * allowances.length)] ?? 10
     let curve: Curve = { kind: 'line', from, to }
     if (random() < 0.5) {
       const [bend1, bend2] = [(random() - 0.5) * 0.5, (random() - 0.5) * 0.5]
@@ -89,13 +89,13 @@ describe('buildCutLine on 4,000 random outlines', () => {
       // Undershoot: nothing that should be inside the cut line is outside it.
       if (areaOutside(seam, ring) > allowedMiss) seamMiss++
       const outward = (t: Vec2): Vec2 => (orientation === 'clockwise' ? { x: t.y, y: -t.x } : { x: -t.y, y: t.x })
-      // Landings trim a band on purpose where it meets a zero edge, so bands are checked without zero edges.
-      if (edges.every(({ allowance }) => allowance > 0)) {
-        for (const { edge, allowance } of edges) {
-          const band = [...offsetCurve(edge.curve, allowance, outward).points, ...flatten(edge.curve, OFFSET_TOLERANCE).toReversed()]
-          if (areaOutside(band, ring) > allowedMiss) bandMiss++
-        }
-      }
+      // A landing trims a band on purpose where it meets a zero edge, so those edges are left out.
+      edges.forEach(({ edge, allowance }, i) => {
+        const neighbours = [edges[(i - 1 + edges.length) % edges.length], edges[(i + 1) % edges.length]]
+        if (allowance === 0 || neighbours.some((neighbour) => neighbour?.allowance === 0)) return
+        const band = [...offsetCurve(edge.curve, allowance, outward).points, ...flatten(edge.curve, OFFSET_TOLERANCE).toReversed()]
+        if (areaOutside(band, ring) > allowedMiss) bandMiss++
+      })
 
       // Overshoot: the interior of each edge span sits at that edge's own allowance.
       for (const span of spans) {
@@ -104,9 +104,14 @@ describe('buildCutLine on 4,000 random outlines', () => {
         if (!edge) continue
         const trueCurve = flatten(edge.edge.curve, 0.001)
         // The first and last chords may be straight extensions to a corner, which are further from the curve.
-        for (const point of span.points.slice(2, -2)) {
-          worstInteriorError = Math.max(worstInteriorError, Math.abs(distanceToChain(point, trueCurve) - span.allowance))
-        }
+        // Midpoints matter most: every vertex is on the true offset by construction, and chords are what the bound is about.
+        span.points.slice(1, -2).forEach((a, i) => {
+          const b = span.points[i + 2]
+          if (!b) return
+          for (const point of [a, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }]) {
+            worstInteriorError = Math.max(worstInteriorError, Math.abs(distanceToChain(point, trueCurve) - span.allowance))
+          }
+        })
       }
     }
 
@@ -115,5 +120,33 @@ describe('buildCutLine on 4,000 random outlines', () => {
     expect([...outcomes.keys()].filter((kind) => kind !== 'built' && kind !== 'edge-swallowed' && kind !== 'split')).toEqual([])
     expect({ seamMiss, bandMiss, notSimple }).toEqual({ seamMiss: 0, bandMiss: 0, notSimple: 0 })
     expect(worstInteriorError).toBeLessThanOrEqual(CUT_LINE_BOUND)
+  }, 120_000)
+
+  it('gives the same cut line wherever the outline starts, with many zero edges', () => {
+    const random = randomSource(54321)
+    const areaOf = (ring: readonly Vec2[]): number =>
+      Math.abs(signedArea(ring.map((from, i): Curve => ({ kind: 'line', from, to: ring[(i + 1) % ring.length] ?? from }))))
+    const differences: string[] = []
+    let built = 0
+
+    for (let shape = 0; shape < 3000; shape++) {
+      const edges = randomOutline(random, [0, 0, 0, 5, 10, 25])
+      const curves = edges.map(({ edge }) => edge.curve)
+      const check = ringIsSimple(curves.flatMap((curve) => flatten(curve, OFFSET_TOLERANCE).slice(0, -1)))
+      if (!check.ok || !check.simple) continue
+      const orientation: Orientation = signedArea(curves) > 0 ? 'clockwise' : 'counterclockwise'
+      const by = 1 + Math.floor(random() * (edges.length - 1))
+      const [one, other] = [buildCutLine(edges, orientation), buildCutLine([...edges.slice(by), ...edges.slice(0, by)], orientation)]
+      if (one.ok !== other.ok) {
+        differences.push(`shape ${shape}: one built, the other did not`)
+      } else if (one.ok && other.ok) {
+        built++
+        const difference = Math.abs(areaOf(one.line.ring) - areaOf(other.line.ring))
+        if (difference > 0.01) differences.push(`shape ${shape}: areas differ by ${difference}`)
+      }
+    }
+
+    expect(differences).toEqual([])
+    expect(built).toBeGreaterThan(2000)
   }, 120_000)
 })
