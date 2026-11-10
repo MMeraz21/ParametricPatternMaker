@@ -1,14 +1,16 @@
-import type { EvaluationIssue } from '@core'
-import { selectionForIssue } from './inspect'
-import type { Selection } from './state'
+import type { ShownIssue } from '@core'
+import { issueTextClass } from './inspect'
 
 interface IssuesPanelProps {
-  issues: readonly EvaluationIssue[]
-  onSelect: (selection: Selection) => void
+  issues: readonly ShownIssue[]
+  onOpen: (issue: ShownIssue) => void
 }
 
-/** Every evaluation issue. Clicking one opens the item it's about, which is how you reach a point the canvas can't draw. */
-export function IssuesPanel({ issues, onSelect }: IssuesPanelProps) {
+/** The badge names the sizes, so a row only spells them out when their reports read differently. */
+const wording = (issue: ShownIssue): string => (issue.instances.every(({ issue: report }) => report.message === issue.message) ? issue.message : issue.text)
+
+/** Every problem, in any size. Clicking one opens the item it's about, in a size that has the problem. */
+export function IssuesPanel({ issues, onOpen }: IssuesPanelProps) {
   return (
     <section aria-labelledby="issues-heading" className="border-t border-neutral-200 p-4">
       <h2 id="issues-heading" className="mb-2 text-sm font-semibold text-neutral-700">
@@ -18,20 +20,14 @@ export function IssuesPanel({ issues, onSelect }: IssuesPanelProps) {
         <p className="text-sm text-neutral-500">No issues.</p>
       ) : (
         <ul className="space-y-1">
-          {issues.map((issue, i) => {
-            const selection = selectionForIssue(issue)
-            return (
-              <li key={i} className="text-sm text-red-700">
-                {selection ? (
-                  <button type="button" className="text-left hover:underline" onClick={() => onSelect(selection)}>
-                    {issue.message}
-                  </button>
-                ) : (
-                  issue.message
-                )}
-              </li>
-            )
-          })}
+          {issues.map((issue) => (
+            <li key={issue.key} className={`text-sm ${issueTextClass(issue)}`}>
+              <button type="button" className="text-left hover:underline" onClick={() => onOpen(issue)}>
+                {wording(issue)}
+              </button>
+              {issue.scope !== null && <span className="ml-1 rounded bg-yellow-100 px-1 text-xs text-yellow-800">{issue.scope}</span>}
+            </li>
+          ))}
         </ul>
       )}
     </section>

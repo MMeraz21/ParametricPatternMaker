@@ -1,3 +1,4 @@
+import { applyEdit, type PatternEdit } from '../edit'
 import { CURRENT_SCHEMA_VERSION, type Pattern } from '../model'
 
 /**
@@ -12,7 +13,6 @@ export const raglanTee: Pattern = {
   version: CURRENT_SCHEMA_VERSION,
   units: 'cm',
   sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-  activeSize: 'M',
   measurements: [
     { name: 'chest', values: { S: 920, M: 1000, L: 1080, XL: 1160, XXL: 1260 } },
     { name: 'neck', values: { S: 370, M: 390, L: 410, XL: 430, XXL: 450 } },
@@ -137,7 +137,8 @@ export const raglanTee: Pattern = {
       seamAllowance: { default: '10', perEdge: { sleeveHem: '25' } },
       notches: [],
       grainline: ['sleeveNeckC', 'sleeveHemFront'],
-      cutCount: 2
+      cutCount: 2,
+      stackPoint: 'sleeveNeckC'
     },
     {
       id: 'neckband',
@@ -151,7 +152,21 @@ export const raglanTee: Pattern = {
       seamAllowance: { default: '10' },
       notches: [],
       grainline: ['bandA', 'bandB'],
-      cutCount: 1
+      cutCount: 1,
+      stackPoint: 'bandA'
     }
   ]
 }
+
+const XXL_ONLY_FAILURES: readonly PatternEdit[] = [
+  // The neckband has no height once the chest passes 1200 mm, so it has no outline.
+  { kind: 'setFormula', owner: { kind: 'variable', name: 'band_width' }, formula: 'chest > 1200 ? 0 : 60' },
+  // The neckline allowance grows with the chest, until in XXL the cut line passes the fold.
+  { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: '10', perEdge: { frontHem: '25', frontNeck: 'chest / 21' } } } }
+]
+
+/**
+ * The raglan with two failures that only happen in the largest size: Neckband loses its outline and Front loses
+ * its cut line. The milestone 6 acceptance fixture; docs/design/m6-size-switcher.md says what it proves.
+ */
+export const raglanFailingInXXL: Pattern = XXL_ONLY_FAILURES.reduce<Pattern>(applyEdit, raglanTee)

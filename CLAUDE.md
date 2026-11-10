@@ -48,7 +48,10 @@ Config files use `.mts` for that reason.
 
 `evaluate(pattern, size)` in `src/core/evaluate.ts` is pure and never throws on bad pattern
 content. Every problem becomes a typed `EvaluationIssue` with an `ItemRef` pointing at the
-offending item, and the affected values are omitted from the `ResolvedPattern`.
+offending item, and the affected values are omitted from the `ResolvedPattern`. App code doesn't call it:
+`evaluateGraded(pattern)` in `src/core/graded.ts` evaluates every size and reports each problem once with the
+sizes that have it, and `viewAt(graded, size)` gives the `SizeView` of one size on screen. Design:
+`docs/design/m6-size-switcher.md`.
 
 1. `model.ts`: zod schemas are the single source of truth; types are `z.infer`'d from them.
    `parsePattern()` validates untrusted JSON. The same schemas are meant to be mirrored in Convex.
@@ -71,14 +74,14 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 
 Pattern changes go through `applyEdit(pattern, edit)` in `src/core/edit.ts`. It is pure, and a no-op
-or refused edit returns the same reference. There are ten edits (`setSegment`, `setPiece`, `retargetEdge`, `removeEdge`, `add`, `remove`, `rename`,
-`setFormula`, `setMeasurement`, `setUnits`), and `checkName` is the one name rule. `rename` rewrites references
+or refused edit returns the same reference. There are thirteen edits (`addSize`, `removeSize`, `renameSize`, `setSegment`, `setPiece`, `retargetEdge`, `removeEdge`, `add`, `remove`, `rename`,
+`setFormula`, `setMeasurement`, `setUnits`), and `checkName` is the one name rule (`checkSizeName` for sizes, which aren't in the formula namespace). `rename` rewrites references
 with `renameReferences` in `formula.ts`, which keeps the user's text.
 
 ### Renderer
 
-`App.tsx` holds the document in one `useReducer` (`editor/state.ts`). From it, `evaluate` produces the
-ResolvedPattern, and `canvas/scene.ts` builds plain drawable data. The canvas camera (`canvas/camera.ts`)
+`App.tsx` holds the document in one `useReducer` (`editor/state.ts`). The size on screen is view state there, never
+saved or undone. From the pattern, `evaluateGraded` and `viewAt` produce the SizeView, and `canvas/scene.ts` builds plain drawable data. The canvas camera (`canvas/camera.ts`)
 is view state owned by `Canvas`, so pan and zoom never re-evaluate. Input policy lives in `canvas/input.ts`:
 wheel and pinch, click versus drag-pan, and nearest-marker picking. The editor panels are one `EditableTable`
 over a `TableModel` built in `panels/tables.ts`. Each cell's `commit(draft)` returns an edit or a

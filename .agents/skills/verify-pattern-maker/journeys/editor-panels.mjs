@@ -17,7 +17,7 @@ export default async function editorPanels({ window, evidence, rendererErrors })
 
   // panels-tabs
   await marker('HPS').waitFor()
-  evidence.check('panels-tabs: five tabs', (await window.getByRole('tab').allTextContents()).join(' | '), 'Measurements | Variables | Points | Segments | Pieces')
+  evidence.check('panels-tabs: six tabs', (await window.getByRole('tab').allTextContents()).join(' | '), 'Measurements | Variables | Points | Segments | Pieces | Sizes')
   evidence.check('panels-tabs: measurements first', await tab('Measurements').getAttribute('aria-selected'), 'true')
   const headers = await window.getByRole('table', { name: 'Measurements (cm)' }).getByRole('columnheader').allTextContents()
   evidence.check('panels-tabs: a column per size', headers.slice(0, 6).join(' | '), 'Name | S | M | L | XL | XXL')

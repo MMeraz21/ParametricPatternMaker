@@ -13,6 +13,11 @@ describe('the public core API', () => {
     expect(Object.keys(core)).not.toContain(name)
   })
 
+  it('offers one way to get results: evaluateGraded, not evaluate', () => {
+    expect(Object.keys(core)).not.toContain('evaluate')
+    expect(Object.keys(core)).toEqual(expect.arrayContaining(['evaluateGraded', 'viewAt']))
+  })
+
   it('still exports the geometry the renderer and export use', () => {
     expect(Object.keys(core)).toEqual(expect.arrayContaining(['pathData', 'polygonPathData', 'distance', 'curveLength', 'flatten', 'vec']))
   })
@@ -59,6 +64,11 @@ describe('source imports', () => {
 
   it('imports clipper2-ts only from ringUnion', () => {
     expect(importersOf((specifier) => specifier.startsWith('clipper2-ts'))).toEqual(['core/ringUnion.test.ts', 'core/ringUnion.ts'])
+  })
+
+  it('calls evaluate only from inside core', () => {
+    expect(importersOf((specifier) => /^@core\/evaluate\b/.test(specifier))).toEqual([])
+    expect(sourceFiles.filter((file) => !file.path.startsWith('core/') && file.imports.some((s) => /(^|\/)evaluate$/.test(s)))).toEqual([])
   })
 
   it('imports the cut line internals only from inside core', () => {

@@ -41,10 +41,60 @@ Deleting a measurement, variable or point that other formulas use is allowed. Th
 (by renaming or adding) clears them. **Current default:** no confirmation and no "used by N" count.
 Possible additions are a confirmation that lists the dependents, or a "used by" column.
 
-### Adding, removing and renaming sizes (from M4)
+### Which size should a file open at? (from M6)
 
-The measurement table has one column per size in `pattern.sizes`, but you can't add or remove sizes
-yet. **Current default:** sizes are fixed (S to XXL in the raglan). Planned for M6, the size switcher.
+The size you're looking at isn't saved, so looking at another size never counts as changing the file. **Current default:** a file
+opens at its first size, and the raglan opens at M. Remembering the last size per file on this computer, outside the file, is the
+likely addition.
+
+### What should a new size start as? (from M6)
+
+**Current default:** a copy of the size you're looking at, placed right after it. You then type the real measurements. Nothing marks
+it as unfinished. Extending the step between neighbouring sizes is the alternative, but it invents numbers nobody entered.
+
+### What counts as a valid size name? (from M6)
+
+**Current default:** anything except an empty name, spaces at either end, a name that matches another size ignoring case (`xl` and
+`XL`), or a word programs reserve (`constructor`, `__proto__`). `38`, `2XL` and `Petite M` are fine.
+
+### Reordering sizes (from M6)
+
+**Current default:** no reordering. A new size goes after the one you're looking at, so nothing can be added before the first size.
+
+### Should removing a size ask first? (from M6)
+
+Removing a size deletes its value in every measurement, and there's no undo yet. **Current default:** no confirmation, the same as
+deleting a measurement. A confirmation that says how many values go is the alternative.
+
+### Where should a piece stack in the all-sizes view? (from M6)
+
+Pieces drafted from a shared origin nest by themselves. Others, like a sleeve drawn to the side, name a stack point, the spot where
+every size meets. **Current default:** a piece with no stack point stays where it was drafted. The pieces only slide into place and
+never rotate. Guessing a stack point automatically is the alternative, but a wrong guess can't be corrected.
+
+### What should the all-sizes view draw? (from M6)
+
+**Current default:** every other size's seam line and cut line, without points, notches or grainlines, and always every size. Printed
+nests often show only cut lines, and choosing which sizes to show is a possible addition.
+
+### Should switching size move the view? (from M6)
+
+**Current default:** no, so you can compare sizes in a still frame. A larger size can run off the edge until you press Fit. Turning on
+All sizes zooms out only if you were viewing the whole size and the nest doesn't fit.
+
+### Should clicking an issue change the size? (from M6)
+
+**Current default:** yes, when the problem isn't in the size you're looking at, so you land where you can see it.
+
+### How should a cell show a problem from another size? (from M6)
+
+A formula is shared by every size, so a problem in XXL is one you'd fix in the same cell. **Current default:** red for a problem in
+the size you're looking at, yellow for a problem only in other sizes.
+
+### Does a problem in one size block export? (from M6)
+
+A cut line can fail in XXL while M is fine. **Current default for M7 to confirm:** export is refused for the sizes that have the
+problem and works for the rest.
 
 ### Reordering rows (from M4)
 
@@ -108,6 +158,11 @@ canvas is the likely improvement.
 
 ## Decided
 
+- **Sizes can be added, removed and renamed** (M6) on the Sizes tab. Formulas never name a size, so they
+  aren't touched. The last size can't be removed. Details are in `docs/design/m6-size-switcher.md`.
+- **A piece's stack point is a field on the piece** (M6), rather than constants in the raglan's formulas. Constants
+  would change where size M is drafted and tie the layout to the largest size. Whether a piece without one should
+  get a guessed stack point is still open above.
 - **An outline with a gap omits the piece** (M2). Its segments still draw and the issue names both
   points. This avoids exporting a piece with a hole in its edge.
 - **A notch on a segment outside its piece's outline is an error** (M2). Notches that appear on both

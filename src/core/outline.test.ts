@@ -13,7 +13,6 @@ function rectangle(piece: Partial<Piece> = {}, overrides: Partial<Pattern> = {})
     version: CURRENT_SCHEMA_VERSION,
     units: 'cm',
     sizes: ['S'],
-    activeSize: 'S',
     measurements: [],
     variables: [{ name: 'notch_at', formula: '30' }],
     points: [
@@ -400,6 +399,34 @@ describe('cut line on a piece', () => {
       const failed = result.issues.find((issue) => issue.kind === 'cut-line-failed')
       expect(failed).toMatchObject({ failure: { kind: 'edge-swallowed' } })
       expect(failed?.message).toMatch(/^Piece 'Panel': the allowances next to segment '\w+' cover it completely/)
+    })
+  })
+
+  describe('stack point', () => {
+    it('resolves to the point it names', () => {
+      expect(panel({ stackPoint: 'c' }).piece?.stackPoint).toEqual(vec(100, 50))
+    })
+
+    it('is absent when the piece names none', () => {
+      expect(Object.keys(panel().piece ?? {})).not.toContain('stackPoint')
+    })
+
+    it('reports a missing point on the piece, which survives', () => {
+      const { result, piece } = panel({ stackPoint: 'ghost' })
+      expect(result.issues).toMatchObject([{ kind: 'missing-point', item: { kind: 'piece', id: 'p' }, pointId: 'ghost', message: "Piece 'Panel' has a stack point on missing point 'ghost'" }])
+      expect(piece?.stackPoint).toBeUndefined()
+      expect(piece?.cutLine).toBeDefined()
+    })
+
+    it('does not find what every object inherits', () => {
+      expect(panel({ stackPoint: 'constructor' }).result.issues).toMatchObject([{ kind: 'missing-point', pointId: 'constructor' }])
+    })
+
+    it('reports a point that could not be evaluated, naming it', () => {
+      const points = [{ id: 'a', name: 'A', x: '0', y: '0' }, { id: 'b', name: 'B', x: '100', y: '0' }, { id: 'c', name: 'C', x: '100', y: '50' }, { id: 'd', name: 'D', x: '0', y: '50' }, { id: 'g', name: 'G', x: 'nope', y: '0' }]
+      const { result, piece } = panel({ stackPoint: 'g' }, { points })
+      expect(result.issues.filter((issue) => issue.kind === 'dependency-failed')).toMatchObject([{ item: { kind: 'piece', id: 'p' }, dependency: 'G', message: "Piece 'Panel' has a stack point on 'G', which could not be evaluated" }])
+      expect(piece?.stackPoint).toBeUndefined()
     })
   })
 

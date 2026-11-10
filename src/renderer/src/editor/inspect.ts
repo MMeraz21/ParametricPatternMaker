@@ -1,4 +1,4 @@
-import type { Axis, EvaluationIssue, Id, Pattern, ResolvedPattern } from '@core'
+import type { Axis, Id, LocatedIssue, Pattern, ShownIssue, SizeView } from '@core'
 import type { Selection } from './state'
 
 /** A point used as an endpoint by any segment is an anchor; one used only as c1/c2 is a control. */
@@ -25,7 +25,7 @@ export interface AxisInspection {
   /** Null when the point did not resolve (both axes are dropped if either fails). */
   readonly value: number | null
   /** Issues about this coordinate. */
-  readonly issues: readonly EvaluationIssue[]
+  readonly issues: readonly ShownIssue[]
 }
 
 export interface PointInspection {
@@ -36,19 +36,16 @@ export interface PointInspection {
   readonly placed: boolean
   readonly axes: Readonly<Record<Axis, AxisInspection>>
   /** Issues on the point as a whole (invalid or duplicate name or id). */
-  readonly pointIssues: readonly EvaluationIssue[]
+  readonly pointIssues: readonly ShownIssue[]
 }
 
 /** Everything the inspector shows for one point; null when the id is no longer in the pattern. */
-export function inspectPoint(pattern: Pattern, resolved: ResolvedPattern, id: Id): PointInspection | null {
+export function inspectPoint(pattern: Pattern, view: SizeView, id: Id): PointInspection | null {
   const point = pattern.points.find((p) => p.id === id)
   if (!point) return null
-  const placed = resolved.points[id]
+  const placed = view.resolved.points[id]
 
-  const axisIssues = (axis: Axis): EvaluationIssue[] =>
-    resolved.issues.filter(
-      (issue) => issue.kind !== 'unknown-size' && issue.item.kind === 'pointCoord' && issue.item.id === id && issue.item.axis === axis
-    )
+  const axisIssues = (axis: Axis): ShownIssue[] => view.issues.filter(({ item }) => item.kind === 'pointCoord' && item.id === id && item.axis === axis)
   const axis = (a: Axis): AxisInspection => ({ formula: point[a], value: placed ? placed[a] : null, issues: axisIssues(a) })
 
   return {
@@ -57,14 +54,22 @@ export function inspectPoint(pattern: Pattern, resolved: ResolvedPattern, id: Id
     role: pointRoles(pattern).get(id) ?? 'anchor',
     placed: placed !== undefined,
     axes: { x: axis('x'), y: axis('y') },
-    pointIssues: resolved.issues.filter((issue) => issue.kind !== 'unknown-size' && issue.item.kind === 'point' && issue.item.id === id)
+    pointIssues: view.issues.filter(({ item }) => item.kind === 'point' && item.id === id)
   }
 }
 
+/** Red for a problem in the size on screen, yellow for one only in other sizes. */
+export function issueTone(issues: readonly ShownIssue[]): 'here' | 'elsewhere' | 'none' {
+  if (issues.length === 0) return 'none'
+  return issues.some((issue) => issue.here) ? 'here' : 'elsewhere'
+}
+
+export const issueTextClass = (issue: ShownIssue): string => (issue.here ? 'text-red-600' : 'text-yellow-700')
+
+export const ISSUE_BORDER_CLASS = { here: 'border-red-500 focus:ring-red-200', elsewhere: 'border-yellow-400 focus:ring-yellow-200' } as const
+
 /** Where clicking an issue takes you: the measurement, variable or point it is about. */
-export function selectionForIssue(issue: EvaluationIssue): Selection | null {
-  if (issue.kind === 'unknown-size') return null
-  const { item } = issue
+export function selectionForIssue({ item }: LocatedIssue): Selection {
   switch (item.kind) {
     case 'measurement':
     case 'variable':

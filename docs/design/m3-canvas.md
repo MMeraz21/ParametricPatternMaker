@@ -107,7 +107,7 @@ Taken from the store candidate:
   and selection, and stops points from blinking while you type.
 - `setVisualZoomLevelLimits(1, 1)` in main.
 
-Trimmed from the base: the `preview`/`cancel` actions, the `setActiveSize` edit (M6), the Unplaced list (the issues
+Trimmed from the base: the `preview`/`cancel` actions, the `setActiveSize` edit (M6 made the size view state instead; see `m6-size-switcher.md`), the Unplaced list (the issues
 panel already covers it), and issue flags drawn in the world.
 
 ## Tradeoffs accepted

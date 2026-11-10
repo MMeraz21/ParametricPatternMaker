@@ -102,7 +102,7 @@ Rejected:
 - We accept selecting a canvas point switching the dock to Points, in exchange for one rule: selection shows its
   row.
 - We accept that a missing measurement value is flagged only on the active size's cell, because `evaluate` reports
-  it for that size only.
+  it for that size only. (M6 removed this gap: every affected size's cell is flagged.)
 
 ## Open questions and risks
 

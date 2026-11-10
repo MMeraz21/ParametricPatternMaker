@@ -1,19 +1,21 @@
-import type { ItemKey, ItemKind, PatternEdit } from '@core'
+import type { ItemKey, PatternEdit } from '@core'
+import type { PanelKind } from '../editor/state'
 import { EditableTable } from './EditableTable'
 import type { TableModel } from './tables'
 
-const TABS: readonly { kind: ItemKind; label: string }[] = [
+const TABS: readonly { kind: PanelKind; label: string }[] = [
   { kind: 'measurement', label: 'Measurements' },
   { kind: 'variable', label: 'Variables' },
   { kind: 'point', label: 'Points' },
   { kind: 'segment', label: 'Segments' },
-  { kind: 'piece', label: 'Pieces' }
+  { kind: 'piece', label: 'Pieces' },
+  { kind: 'size', label: 'Sizes' }
 ]
 
 interface PanelDockProps {
   /** The first is the tab's own table; the Pieces tab adds more below it. */
   tables: readonly TableModel[]
-  onShowPanel: (kind: ItemKind) => void
+  onShowPanel: (kind: PanelKind) => void
   onEdit: (edit: PatternEdit) => void
   onSelect: (key: ItemKey) => void
 }

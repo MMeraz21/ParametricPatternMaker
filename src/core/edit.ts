@@ -1,5 +1,5 @@
 import { isValidName, renameReferences, type Axis } from './formula'
-import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Piece, type Point, type SeamAllowance, type Segment, type SizeName, type Variable } from './model'
+import { isSizeName, visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Piece, type Point, type SeamAllowance, type Segment, type SizeName, type Variable } from './model'
 
 /**
  * Pattern edits: the one way anything changes a Pattern (panels, inspector, undo and MCP later).
@@ -30,7 +30,7 @@ export type NewItem =
   | { readonly kind: 'piece'; readonly piece: Piece }
 
 /** A piece's fields to replace. A `fold` of null clears it; setting one deletes that edge's override. */
-export type PiecePatch = Partial<Pick<Piece, 'name' | 'outline' | 'seamAllowance' | 'notches' | 'grainline' | 'cutCount'>> & { readonly fold?: Id | null }
+export type PiecePatch = Partial<Pick<Piece, 'name' | 'outline' | 'seamAllowance' | 'notches' | 'grainline' | 'cutCount'>> & { readonly fold?: Id | null; readonly stackPoint?: Id | null }
 
 export type FormulaOwner =
   | { readonly kind: 'variable'; readonly name: string }
@@ -52,6 +52,12 @@ export type PatternEdit =
   | { readonly kind: 'retargetEdge'; readonly pieceId: Id; readonly index: number; readonly segmentId: Id }
   /** Removes an outline edge, with its override, the fold if it was the fold, and its notches. */
   | { readonly kind: 'removeEdge'; readonly pieceId: Id; readonly index: number }
+  /** Inserts after `after`, copying its value for every measurement that has one. Refused on a bad or taken name, or an unknown `after`. */
+  | { readonly kind: 'addSize'; readonly name: SizeName; readonly after: SizeName }
+  /** Deletes the column and each measurement's value for it. Refused for the last size or an unknown size. */
+  | { readonly kind: 'removeSize'; readonly name: SizeName }
+  /** Renames in `sizes` and every `values` key. Formulas never name a size. */
+  | { readonly kind: 'renameSize'; readonly from: SizeName; readonly to: SizeName }
 
 /** Why a name can't be used. Messages are ready to show. */
 export type NameProblem = { readonly kind: 'invalid' | 'taken'; readonly message: string }
@@ -82,6 +88,20 @@ export function checkName(pattern: Pattern, name: string, except?: ItemKey): Nam
   const owner = nameOwner(pattern, name)
   if (owner && !(except && sameItem(owner, except))) return { kind: 'taken', message: `'${name}' is already used by a ${owner.kind}` }
   return null
+}
+
+/** The single size-name rule. `except` is the size being renamed. The UI shows the message; applyEdit calls it again. */
+export function checkSizeName(pattern: Pattern, name: string, except?: SizeName): NameProblem | null {
+  if (!isSizeName(name)) return { kind: 'invalid', message: `'${name}' can't be a size name: it can't be empty, have spaces at either end, or be a word programs reserve` }
+  const taken = pattern.sizes.find((size) => size !== except && size.toLowerCase() === name.toLowerCase())
+  return taken === undefined ? null : { kind: 'taken', message: `There is already a size named '${taken}'` }
+}
+
+/** The smallest unused `Size <N>`. Deterministic, so the edit carries the name. */
+export function newSizeName(pattern: Pattern): SizeName {
+  let n = 1
+  while (checkSizeName(pattern, `Size ${n}`)) n++
+  return `Size ${n}`
 }
 
 function uniqueName(pattern: Pattern, base: string): string {
@@ -193,6 +213,12 @@ export function applyEdit(pattern: Pattern, edit: PatternEdit): Pattern {
       return updatePiece(pattern, edit.pieceId, (piece) => retargetEdge(piece, edit.index, edit.segmentId))
     case 'removeEdge':
       return updatePiece(pattern, edit.pieceId, (piece) => removeEdge(piece, edit.index))
+    case 'addSize':
+      return addSize(pattern, edit.name, edit.after)
+    case 'removeSize':
+      return removeSize(pattern, edit.name)
+    case 'renameSize':
+      return renameSize(pattern, edit.from, edit.to)
     default: {
       const _exhaustive: never = edit
       return _exhaustive
@@ -242,16 +268,60 @@ function removeEdge(piece: Piece, index: number): Piece {
   })
 }
 
-function patchPiece(piece: Piece, { fold, ...fields }: PiecePatch): Piece {
+function patchPiece(piece: Piece, { fold, stackPoint, ...fields }: PiecePatch): Piece {
   const patched: Piece = { ...piece, ...fields }
   let next = patched
+  if (stackPoint === null) {
+    const { stackPoint: _cleared, ...rest } = next
+    next = rest
+  } else if (stackPoint !== undefined) {
+    next = { ...next, stackPoint }
+  }
   if (fold === null) {
-    const { fold: _cleared, ...rest } = patched
+    const { fold: _cleared, ...rest } = next
     next = rest
   } else if (fold !== undefined) {
-    next = { ...patched, seamAllowance: withoutOverride(patched.seamAllowance, fold), fold }
+    next = { ...next, seamAllowance: withoutOverride(next.seamAllowance, fold), fold }
   }
   return unchanged(next, piece) ? piece : next
+}
+
+/** The new size list, with every measurement's values rewritten for it. */
+function withSizes(pattern: Pattern, sizes: readonly SizeName[], rewrite: (values: Measurement['values']) => Measurement['values']): Pattern {
+  const [first, ...rest] = sizes
+  if (first === undefined) return pattern
+  return { ...pattern, sizes: [first, ...rest], measurements: pattern.measurements.map((measurement) => ({ ...measurement, values: rewrite(measurement.values) })) }
+}
+
+const entriesExcept = (values: Measurement['values'], name: SizeName): [SizeName, number][] => Object.entries(values).filter(([size]) => size !== name)
+
+function addSize(pattern: Pattern, name: SizeName, after: SizeName): Pattern {
+  const index = pattern.sizes.indexOf(after)
+  if (index === -1 || checkSizeName(pattern, name)) return pattern
+  return withSizes(pattern, pattern.sizes.toSpliced(index + 1, 0, name), (values) => {
+    const value = values[after]
+    // Dropping a leftover key first, so a measurement with nothing to copy stays without a value.
+    const others = entriesExcept(values, name)
+    return Object.fromEntries(value === undefined ? others : [...others, [name, value]])
+  })
+}
+
+function removeSize(pattern: Pattern, name: SizeName): Pattern {
+  if (!pattern.sizes.includes(name)) return pattern
+  return withSizes(
+    pattern,
+    pattern.sizes.filter((size) => size !== name),
+    (values) => Object.fromEntries(entriesExcept(values, name))
+  )
+}
+
+function renameSize(pattern: Pattern, from: SizeName, to: SizeName): Pattern {
+  if (from === to || !pattern.sizes.includes(from) || checkSizeName(pattern, to, from)) return pattern
+  return withSizes(
+    pattern,
+    pattern.sizes.map((size) => (size === from ? to : size)),
+    (values) => Object.fromEntries(entriesExcept(values, to).map(([size, value]) => [size === from ? to : size, value]))
+  )
 }
 
 function add(pattern: Pattern, item: NewItem): Pattern {

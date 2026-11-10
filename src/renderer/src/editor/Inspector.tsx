@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { UNIT_LABEL, formatLength, type Axis, type DisplayUnits, type PatternEdit } from '@core'
-import type { AxisInspection, PointInspection } from './inspect'
+import { ISSUE_BORDER_CLASS, issueTextClass, issueTone, type AxisInspection, type PointInspection } from './inspect'
 
 interface InspectorProps {
   inspection: PointInspection | null
@@ -29,9 +29,9 @@ export function Inspector({ inspection, units, onEdit }: InspectorProps) {
           This point can't be drawn until its formulas resolve.
         </p>
       )}
-      {inspection.pointIssues.map((issue, i) => (
-        <p key={i} className="text-sm text-red-700">
-          {issue.message}
+      {inspection.pointIssues.map((issue) => (
+        <p key={issue.key} className={`text-sm ${issueTextClass(issue)}`}>
+          {issue.text}
         </p>
       ))}
       {(['x', 'y'] as const).map((axis) => (
@@ -86,12 +86,12 @@ function AxisField({ name, axis, inspection, units, onCommit }: AxisFieldProps) 
           if (e.key === 'Escape') setDraft(inspection.formula)
         }}
         className={`w-full rounded border px-2 py-1 font-mono text-sm outline-none focus:ring-2 ${
-          inspection.issues.length > 0 ? 'border-red-400 focus:ring-red-200' : 'border-neutral-300 focus:ring-sky-200'
+          { ...ISSUE_BORDER_CLASS, none: 'border-neutral-300 focus:ring-sky-200' }[issueTone(inspection.issues)]
         }`}
       />
-      {inspection.issues.map((issue, i) => (
-        <p key={i} className="text-xs text-red-700">
-          {issue.message}
+      {inspection.issues.map((issue) => (
+        <p key={issue.key} className={`text-xs ${issueTextClass(issue)}`}>
+          {issue.text}
         </p>
       ))}
     </div>
