@@ -285,10 +285,10 @@ export function areaOutside(inner: readonly Vec2[], outer: readonly Vec2[]): num
   licence, and its dist imports no Node or DOM symbol, so `src/core` keeps its rule the same way it does
   with `mathjs` and `zod`. It is pure JavaScript with no WASM or async setup, so `evaluate` stays
   synchronous. `clipper2-js` was rejected: unpublished since January 2024 and it has no Z channel.
-- **Contained to one file and five symbols:** `Clipper64`, `ClipType.Union`, `FillRule`, `PathType`,
-  `area`. No Clipper type crosses the module boundary.
+- **Contained to one file and four runtime symbols:** `Clipper64`, `ClipType` (`Union` and, for
+  `areaOutside`, `Difference`), `FillRule`, `PathType`. No Clipper type crosses the module boundary.
 - **Prerelease risk.** The exact pin stops unplanned upgrades. A library-behaviour test pins what we
-  depend on: a union keeps input Z values and `zCallback` tags crossings.
+  depend on: a union keeps input Z values, `zCallback` tags crossings, and collinear vertices stay by default.
 - **Module format.** The package is ESM only and the app is CJS on purpose. The renderer bundles it through
   Vite. Vitest loads it. Preload never imports core. Main does not import `@core` today. When it first
   does, add `main.build.externalizeDeps: { exclude: ['clipper2-ts'] }` so it is bundled to CJS.
@@ -343,8 +343,9 @@ outline omits a piece, as in M2. `cutLine` present means safe to print.
 | Grainline points coincide | `degenerate-grainline` | No `grainline` |
 | `fold` not in outline, curved, or piece on both sides | `invalid-fold-edge` | No `fold`, edge reads its own allowance |
 
-The 100 m guard keeps integer arithmetic exact: scaled by 1000, 100 m is `1e8`, whose square is under
-`2^53`, so `ringIsSimple`'s area comparison is exact, and Clipper's overflow cannot be reached.
+The 100 m guard keeps coordinates well inside Clipper's integer range: scaled by 1000, 100 m is `1e8`.
+Products of those can pass `2^53`, so `ringUnion.ts` computes areas with `BigInt` and `ringIsSimple`'s
+comparison stays exact.
 
 A formula blocks the cut line only if an edge uses it. A stale override, an override on a fold edge, and a
 default that every edge overrides still report their issue but don't block. To find an edge's width, check
