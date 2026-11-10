@@ -75,6 +75,7 @@ export function selectionForIssue(issue: EvaluationIssue): Selection | null {
     case 'segment':
     case 'piece':
     case 'notch':
+    case 'seamAllowance':
       return null
     default: {
       const _exhaustive: never = item

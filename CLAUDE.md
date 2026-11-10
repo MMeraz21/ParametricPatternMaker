@@ -63,7 +63,8 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    path). Nodes downstream of a failure get `dependency-failed`.
 5. `outline.ts` (internal, called once at the end of `evaluate`): turns resolved points into
    segment curves with lengths, and pieces into closed, oriented outlines with placed notches. Notch
-   distances are the only other DAG nodes. Closure is checked by point id, not coordinates. All maths
+   distances and seam allowances are the only other DAG nodes, and `visitPieceFormulas` is the one list of
+   them. Closure is checked by point id, not coordinates. All maths
    is in `geometry.ts`, a kernel with no model imports (arc length, sampling, flattening, area, SVG
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 

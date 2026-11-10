@@ -98,7 +98,10 @@ export interface GeometryOutput {
 /** Outlines whose area is below this fraction of perimeter² enclose nothing. */
 const DEGENERATE_AREA_RATIO = 1e-9
 
-export const notchKey = (pieceId: Id, notchId: Id): string => `notch:${pieceId}/${notchId}`
+// Ids are free text, so the parts are JSON-encoded: joining them with a separator lets two items collide.
+export const notchKey = (pieceId: Id, notchId: Id): string => `notch:${JSON.stringify([pieceId, notchId])}`
+/** A `segmentId` of null is the piece's default allowance. */
+export const allowanceKey = (pieceId: Id, segmentId: Id | null): string => `allowance:${JSON.stringify([pieceId, segmentId])}`
 
 /** The only mapping from model segment kinds to kernel curves. Undefined if any point is unresolved. */
 function toCurve(segment: Segment, points: Readonly<Record<Id, ResolvedPoint>>): Curve | undefined {

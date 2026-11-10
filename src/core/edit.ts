@@ -1,5 +1,5 @@
 import { isValidName, renameReferences, type Axis } from './formula'
-import type { DisplayUnits, Id, Measurement, Pattern, Point, SizeName, Variable } from './model'
+import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Point, type SizeName, type Variable } from './model'
 
 /**
  * Pattern edits: the one way anything changes a Pattern (panels, inspector, undo and MCP later).
@@ -231,13 +231,7 @@ function rename(pattern: Pattern, item: ItemKey, to: string): Pattern {
     const name = item.kind === 'point' && p.id === item.id ? to : p.name
     return x === p.x && y === p.y && name === p.name ? p : { ...p, name, x, y }
   })
-  const pieces = pattern.pieces.map((piece) => {
-    const notches = piece.notches.map((n) => {
-      const distance = rewrite(n.distance)
-      return distance === n.distance ? n : { ...n, distance }
-    })
-    return notches.every((n, i) => n === piece.notches[i]) ? piece : { ...piece, notches }
-  })
+  const pieces = pattern.pieces.map((piece) => visitPieceFormulas(piece, (_owner, source) => rewrite(source)))
   const measurements =
     item.kind === 'measurement' ? pattern.measurements.map((m) => (m.name === from ? { ...m, name: to } : m)) : pattern.measurements
   if (refused) return pattern

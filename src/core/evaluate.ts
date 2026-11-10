@@ -1,7 +1,7 @@
 import { compileFormula, evaluateExpr, isValidName, referenceKey, type Axis, type Expr, type Reference } from './formula'
 import { topologicalSort } from './graph'
-import type { Id, Pattern, SizeName } from './model'
-import { notchKey, resolveGeometry, type ResolvedPiece, type ResolvedSegment } from './outline'
+import { visitPieceFormulas, type Id, type Pattern, type Piece, type PieceFormulaOwner, type SizeName } from './model'
+import { allowanceKey, notchKey, resolveGeometry, type ResolvedPiece, type ResolvedSegment } from './outline'
 
 /** Identifies the pattern item an issue is about, so the UI can point at it. */
 export type ItemRef =
@@ -12,6 +12,8 @@ export type ItemRef =
   | { kind: 'segment'; id: Id }
   | { kind: 'piece'; id: Id; name: string }
   | { kind: 'notch'; pieceId: Id; id: Id }
+  /** A `segmentId` of null is the piece's default allowance. */
+  | { kind: 'seamAllowance'; pieceId: Id; segmentId: Id | null }
 
 export type EvaluationIssue =
   | { kind: 'unknown-size'; size: SizeName; message: string }
@@ -43,6 +45,7 @@ export type EvaluationIssue =
   | { kind: 'notch-off-outline'; item: ItemRef; segmentId: Id; message: string }
   | { kind: 'notch-out-of-range'; item: ItemRef; distance: number; length: number; message: string }
   | { kind: 'notch-on-degenerate-segment'; item: ItemRef; message: string }
+  | { kind: 'negative-seam-allowance'; item: ItemRef; value: number; message: string }
 
 export interface ResolvedPoint {
   id: Id
@@ -102,8 +105,35 @@ function describe(item: ItemRef): string {
       return `piece '${item.name}'`
     case 'notch':
       return `notch '${item.id}'`
+    case 'seamAllowance':
+      return `the seam allowance of piece '${item.pieceId}'`
     default: {
       const _exhaustive: never = item
+      return _exhaustive
+    }
+  }
+}
+
+function pieceFormulaNode(piece: Piece, owner: PieceFormulaOwner, source: string): FormulaNode {
+  switch (owner.kind) {
+    case 'notch':
+      return {
+        key: notchKey(piece.id, owner.id),
+        item: { kind: 'notch', pieceId: piece.id, id: owner.id },
+        label: `notch ${owner.id}`,
+        source,
+        failed: false
+      }
+    case 'seamAllowance':
+      return {
+        key: allowanceKey(piece.id, owner.segmentId),
+        item: { kind: 'seamAllowance', pieceId: piece.id, segmentId: owner.segmentId },
+        label: `Seam allowance of '${piece.name}'${owner.segmentId === null ? '' : ` on '${owner.segmentId}'`}`,
+        source,
+        failed: false
+      }
+    default: {
+      const _exhaustive: never = owner
       return _exhaustive
     }
   }
@@ -184,22 +214,18 @@ export function evaluate(pattern: Pattern, size: SizeName): ResolvedPattern {
     }
   }
 
-  // Notch distances are formulas too. They are leaves (nothing can reference a notch), so they cannot
-  // form cycles. Duplicate piece or notch ids are reported by resolveGeometry.
-  const notchKeys = new Set<string>()
+  // Notch distances and seam allowances are formulas too. They are leaves (nothing can reference them), so
+  // they cannot form cycles. Duplicate piece or notch ids are reported by resolveGeometry.
+  const pieceFormulaKeys = new Set<string>()
   for (const piece of pattern.pieces) {
-    for (const notch of piece.notches) {
-      const key = notchKey(piece.id, notch.id)
-      if (notchKeys.has(key)) continue
-      notchKeys.add(key)
-      formulaNodes.push({
-        key,
-        item: { kind: 'notch', pieceId: piece.id, id: notch.id },
-        label: `notch ${notch.id}`,
-        source: notch.distance,
-        failed: false
-      })
-    }
+    visitPieceFormulas(piece, (owner, source) => {
+      const node = pieceFormulaNode(piece, owner, source)
+      if (!pieceFormulaKeys.has(node.key)) {
+        pieceFormulaKeys.add(node.key)
+        formulaNodes.push(node)
+      }
+      return source
+    })
   }
 
   const resolveReference = (node: FormulaNode, ref: Reference): string | undefined => {
@@ -293,6 +319,15 @@ export function evaluate(pattern: Pattern, size: SizeName): ResolvedPattern {
       issues.push({ kind: 'not-finite', item: node.item, message: `${node.label} evaluated to ${value}` })
       continue
     }
+    if (node.item.kind === 'seamAllowance' && value < 0) {
+      issues.push({
+        kind: 'negative-seam-allowance',
+        item: node.item,
+        value,
+        message: `${node.label} is ${value} mm; it can't be negative`
+      })
+      continue
+    }
     values.set(key, value)
   }
 
@@ -312,9 +347,9 @@ export function evaluate(pattern: Pattern, size: SizeName): ResolvedPattern {
   const pointNames = new Map<Id, string>()
   for (const { id, name } of pattern.points) if (!pointNames.has(id)) pointNames.set(id, name)
   const notchDistances = new Map<string, number>()
-  for (const key of notchKeys) {
+  for (const { key, item } of formulaNodes) {
     const value = values.get(key)
-    if (value !== undefined) notchDistances.set(key, value)
+    if (item.kind === 'notch' && value !== undefined) notchDistances.set(key, value)
   }
   const geometry = resolveGeometry({ pattern, points, pointNames, notchDistances })
   issues.push(...geometry.issues)

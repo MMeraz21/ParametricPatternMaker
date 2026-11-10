@@ -325,8 +325,8 @@ outline omits a piece, as in M2. `cutLine` present means safe to print.
 
 | Failure | Issue | `ResolvedPattern` holds |
 |---|---|---|
-| Allowance formula broken, undefined name, depends on a cycle, non-finite | Existing formula issues, `item: seamAllowance` | No `cutLine` |
-| Allowance negative | `negative-seam-allowance` | No `cutLine` |
+| Allowance formula broken, undefined name, depends on a cycle, non-finite | Existing formula issues, `item: seamAllowance` | No `cutLine` if an outline edge uses that formula, otherwise `cutLine` |
+| Allowance negative | `negative-seam-allowance` | No `cutLine` if an outline edge uses that formula, otherwise `cutLine` |
 | `perEdge` key not in the outline | `unknown-seam-allowance-edge` | `cutLine` built, stale key ignored |
 | Allowance set on a fold edge | `fold-edge-has-allowance` | `cutLine` built with 0 on that edge |
 | Coordinates or allowance past 100 m (a 1e9 square passes M2 and would reach Clipper) | `cut-line-failed: out-of-range` | No `cutLine` |
@@ -345,6 +345,12 @@ outline omits a piece, as in M2. `cutLine` present means safe to print.
 
 The 100 m guard keeps integer arithmetic exact: scaled by 1000, 100 m is `1e8`, whose square is under
 `2^53`, so `ringIsSimple`'s area comparison is exact, and Clipper's overflow cannot be reached.
+
+A formula blocks the cut line only if an edge uses it. A stale override, an override on a fold edge, and a
+default that every edge overrides still report their issue but don't block. To find an edge's width, check
+`Object.hasOwn(perEdge, segmentId)` first and then read that key's value. Failed formulas are absent from the
+value map, so falling back to the default on a missing value would silently print a broken override at the
+default width.
 
 `edge-swallowed` is deliberate, with a clear threshold. A concave arc is refused when its radius is at
 most the allowance (15 mm radius: 14 mm passes, 15 mm is refused). A slot is refused when the allowance is
@@ -377,8 +383,9 @@ export function visitPieceFormulas(piece: Piece, visit: (owner: PieceFormulaOwne
 
 - **Allowances become formulas.** A `seam` or `hem` variable changes every piece at once, `5/8 * inch` and
   `1.5cm` are how sewists write them, and notch distance is the precedent.
-- **New DAG leaves**, built exactly like notch distances: `allowance:<pieceId>/default` and
-  `allowance:<pieceId>/edge:<segmentId>`, through `allowanceKey` next to `notchKey`. Nothing can reference
+- **New DAG leaves**, built exactly like notch distances, one for the default and one per override. `allowanceKey`
+  sits next to `notchKey`, and both JSON-encode their ids, because ids are free text and joining them with a
+  separator lets two items collide. Nothing can reference
   them, so they cannot form cycles, and every formula issue comes free. The DAG stays numbers-only and
   geometry stays outside it. Negative values move from zod to `evaluate`, where they have an `ItemRef`.
 - **`rename` must rewrite them.** `visitPieceFormulas` replaces the notch-only code at `edit.ts:234` and
@@ -432,8 +439,7 @@ no piece picking on the canvas. Pieces are selected from the Pieces tab, and a s
 **Already done on this branch.** `fixtures/raglan.ts` gains back, sleeve and neckband, appended so every
 existing index stays valid. The back shares the front's hem and side seam, which tests one segment in two
 pieces. The sleeve raglans are point reflections of the body raglans, so seams match in length exactly. The
-neckband winds the other way. All four pieces resolve with zero issues in all five sizes. It still uses
-today's schema (numeric allowances, `mirror`), and the model step below converts it.
+neckband winds the other way. All four pieces resolve with zero issues in all five sizes.
 
 `fixtures/raglan.test.ts` holds what is checkable today plus these checks as `it.todo`, each for every size:
 
@@ -485,7 +491,7 @@ was proven on all four pieces and keeps the edge identity M7 needs. The judge al
 cross a fold at an obtuse corner, which their rule doesn't handle.
 
 Grafted from the bands: `rayExit` for notches, which also removed an issue kind. The library-behaviour pin
-test and the mocked library throw. The collision-free DAG keys `allowance:<pieceId>/edge:<segmentId>`. The
+test and the mocked library throw. A DAG key per allowance. The
 finding that a 1e9 square passes M2 and needs the guard.
 
 Rejected:
@@ -573,4 +579,4 @@ Each step is test-first, with `/tdd` for core code.
 5. `resolvePiece` wiring: grainline, fold, notch marks, issues. Turn the `it.todo` checks on.
 6. New edits in `edit.ts`.
 7. Canvas and panels, with a `pieces` feature file and journey in `verify-pattern-maker`.
-8. `/interrogate` and `/code-review` before merging, and update PLAN.md's data model.
+8. `/interrogate` and `/code-review` before merging.

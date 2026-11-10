@@ -33,7 +33,7 @@ function rectangle(piece: Partial<Piece> = {}, overrides: Partial<Pattern> = {})
         id: 'p',
         name: 'Panel',
         outline: [{ segmentId: 'top' }, { segmentId: 'right' }, { segmentId: 'bottom' }, { segmentId: 'left' }],
-        seamAllowance: { default: 10 },
+        seamAllowance: { default: '10' },
         notches: [],
         grainline: ['a', 'd'],
         cutCount: 1,
@@ -199,6 +199,77 @@ describe('notches', () => {
     expect(result.issues).toMatchObject([{ kind: 'undefined-reference', item: { kind: 'notch', pieceId: 'p', id: 'n' } }])
     expect(result.pieces['p']?.notches).toEqual([])
   })
+})
+
+describe('seam allowance formulas', () => {
+  const issuesFor = (seamAllowance: Piece['seamAllowance']) => evaluate(rectangle({ seamAllowance }), 'S').issues
+
+  it('accepts variables, units and zero', () => {
+    expect(issuesFor({ default: 'notch_at', perEdge: { top: '5/8 * inch', left: '0' } })).toEqual([])
+  })
+
+  it('reports a negative default against the piece', () => {
+    expect(issuesFor({ default: '-5' })).toEqual([
+      {
+        kind: 'negative-seam-allowance',
+        item: { kind: 'seamAllowance', pieceId: 'p', segmentId: null },
+        value: -5,
+        message: "Seam allowance of 'Panel' is -5 mm; it can't be negative"
+      }
+    ])
+  })
+
+  it('reports a negative override against its edge', () => {
+    expect(issuesFor({ default: '10', perEdge: { top: 'notch_at - 31' } })).toMatchObject([
+      { kind: 'negative-seam-allowance', item: { kind: 'seamAllowance', pieceId: 'p', segmentId: 'top' }, value: -1 }
+    ])
+  })
+
+  it('reports a broken formula against the edge that owns it', () => {
+    expect(issuesFor({ default: '10', perEdge: { top: 'nope' } })).toMatchObject([
+      { kind: 'undefined-reference', item: { kind: 'seamAllowance', pieceId: 'p', segmentId: 'top' }, reference: 'nope' }
+    ])
+  })
+
+  it('keeps a piece usable when its allowance is broken', () => {
+    const result = evaluate(rectangle({ seamAllowance: { default: 'nope' } }), 'S')
+    expect(result.pieces['p']?.area).toBe(5000)
+  })
+
+  it('keeps allowances separate when ids contain the key separators', () => {
+    const base = rectangle()
+    const [piece] = base.pieces
+    if (!piece) throw new Error('rectangle has a piece')
+    const pattern: Pattern = {
+      ...base,
+      pieces: [
+        { ...piece, id: 'a', seamAllowance: { default: '10', perEdge: { 'x/default': 'broken_one' } } },
+        { ...piece, id: 'a/edge:x', seamAllowance: { default: 'broken_two' } }
+      ]
+    }
+    const missing = evaluate(pattern, 'S').issues.flatMap((issue) => (issue.kind === 'undefined-reference' ? [issue.reference] : []))
+    expect(missing).toEqual(['broken_one', 'broken_two'])
+  })
+
+  it('keeps notch distances separate when ids contain the key separators', () => {
+    const base = rectangle()
+    const [piece] = base.pieces
+    if (!piece) throw new Error('rectangle has a piece')
+    const notch = (id: string, distance: string) => ({ id, segmentId: 'top', distance })
+    const pattern: Pattern = {
+      ...base,
+      pieces: [
+        { ...piece, id: 'p', notches: [notch('a/b', '10')] },
+        { ...piece, id: 'p/a', notches: [notch('b', '20')] }
+      ]
+    }
+    const result = evaluate(pattern, 'S')
+    expect(result.pieces['p']?.notches[0]?.distance).toBe(10)
+    expect(result.pieces['p/a']?.notches[0]?.distance).toBe(20)
+  })
+
+  it.todo('builds no cut line when an edge override is broken, rather than using the default width')
+  it.todo('still builds a cut line when a broken override names an edge outside the outline')
 })
 
 describe('flattenOutline', () => {

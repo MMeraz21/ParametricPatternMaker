@@ -80,6 +80,24 @@ describe('rename', () => {
     expect(next.pieces[0]?.notches[0]?.distance).toBe('ease')
   })
 
+  it('rewrites seam allowance formulas, keeping the text', () => {
+    const withAllowances: Pattern = {
+      ...raglanTee,
+      pieces: raglanTee.pieces.map((p) => ({
+        ...p,
+        seamAllowance: { default: 'chest_ease + 1', perEdge: { frontHem: ' chest_ease*2 ' } }
+      }))
+    }
+    const next = applyEdit(withAllowances, { kind: 'rename', item: { kind: 'variable', name: 'chest_ease' }, to: 'ease' })
+    expect(next.pieces[0]?.seamAllowance).toEqual({ default: 'ease + 1', perEdge: { frontHem: ' ease*2 ' } })
+    expect(evaluate(next, 'M').issues).toEqual([])
+  })
+
+  it('shares the pieces when no piece formula uses the name', () => {
+    const next = applyEdit(raglanTee, { kind: 'rename', item: { kind: 'measurement', name: 'neck' }, to: 'neck_circ' })
+    expect(next.pieces).toBe(raglanTee.pieces)
+  })
+
   it('refuses invalid or taken names', () => {
     const neck = { kind: 'measurement', name: 'neck' } as const
     expect(applyEdit(raglanTee, { kind: 'rename', item: neck, to: 'chest' })).toBe(raglanTee)
