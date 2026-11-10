@@ -53,7 +53,7 @@ describe('pointRoles', () => {
     expect(roles.get('hps')).toBe('anchor')
     expect(roles.get('neckC1')).toBe('control')
     expect(roles.get('raglanC2')).toBe('control')
-    expect([...roles.values()].filter((role) => role === 'control')).toHaveLength(4)
+    expect([...roles.values()].filter((role) => role === 'control')).toHaveLength(13)
   })
 })
 

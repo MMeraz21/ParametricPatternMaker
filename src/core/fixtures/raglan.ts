@@ -1,10 +1,12 @@
 import { CURRENT_SCHEMA_VERSION, type Pattern } from '../model'
 
 /**
- * Raglan baseball tee, shared by tests across the core. Currently drafts the front body only;
- * back, sleeve and neckband are added as the geometry milestones land.
+ * Raglan baseball tee, shared by tests across the core and the MVP acceptance test: front, back, sleeve
+ * and neckband in sizes S to XXL. New items are appended so existing indices stay valid.
  *
- * Coordinates are in mm with y pointing down (SVG convention). x = 0 is centre front (cut on fold).
+ * Coordinates are in mm with y pointing down (SVG convention). x = 0 is the centre front and centre back
+ * (cut on fold). The back shares the front's hem and side seam. The sleeve raglans are point reflections
+ * of the body raglans, so each pair of raglan seams has exactly the same length in every size.
  */
 export const raglanTee: Pattern = {
   version: CURRENT_SCHEMA_VERSION,
@@ -23,7 +25,15 @@ export const raglanTee: Pattern = {
     { name: 'body_width', formula: '(chest + chest_ease) / 4' },
     { name: 'neck_width', formula: 'neck / 6 + 5' },
     { name: 'front_neck_depth', formula: 'neck / 6 + 25' },
-    { name: 'hem_length', formula: 'back_length - 20' }
+    { name: 'hem_length', formula: 'back_length - 20' },
+    { name: 'back_neck_depth', formula: 'neck_width * 0.35' },
+    { name: 'sleeve_centre', formula: 'body_width * 2 + 200' },
+    { name: 'sleeve_top_half', formula: 'neck_width * 0.6' },
+    { name: 'sleeve_length', formula: '240' },
+    { name: 'sleeve_hem_half', formula: 'chest / 8 + 10' },
+    { name: 'band_length', formula: '(neck_width - 5) * 5.5' },
+    { name: 'band_width', formula: '60' },
+    { name: 'band_top', formula: 'hem_length + 150' }
   ],
   points: [
     { id: 'hps', name: 'HPS', x: 'neck_width', y: '0' },
@@ -35,14 +45,50 @@ export const raglanTee: Pattern = {
     { id: 'neckC1', name: 'NeckC1', x: 'HPS.x * 0.9', y: 'CFNeck.y * 0.6' },
     { id: 'neckC2', name: 'NeckC2', x: 'HPS.x * 0.5', y: 'CFNeck.y' },
     { id: 'raglanC1', name: 'RaglanC1', x: 'HPS.x + (Underarm.x - HPS.x) * 0.55', y: 'Underarm.y * 0.4' },
-    { id: 'raglanC2', name: 'RaglanC2', x: 'Underarm.x - 15', y: 'Underarm.y * 0.85' }
+    { id: 'raglanC2', name: 'RaglanC2', x: 'Underarm.x - 15', y: 'Underarm.y * 0.85' },
+    // Back.
+    { id: 'cbNeck', name: 'CBNeck', x: '0', y: 'back_neck_depth' },
+    { id: 'backNeckC1', name: 'BackNeckC1', x: 'HPS.x * 0.8', y: 'CBNeck.y * 0.9' },
+    { id: 'backNeckC2', name: 'BackNeckC2', x: 'HPS.x * 0.4', y: 'CBNeck.y' },
+    { id: 'backRaglanC1', name: 'BackRaglanC1', x: 'Underarm.x - 25', y: 'Underarm.y * 0.8' },
+    { id: 'backRaglanC2', name: 'BackRaglanC2', x: 'HPS.x + (Underarm.x - HPS.x) * 0.5', y: 'Underarm.y * 0.35' },
+    // Sleeve, drafted flat to the right of the body. Its raglan controls mirror the body's through the chord.
+    { id: 'sleeveTopFront', name: 'SleeveTopFront', x: 'sleeve_centre + sleeve_top_half', y: '0' },
+    { id: 'sleeveTopBack', name: 'SleeveTopBack', x: 'sleeve_centre - sleeve_top_half', y: '0' },
+    { id: 'sleeveNeckC', name: 'SleeveNeckC', x: 'sleeve_centre', y: '-12' },
+    { id: 'sleeveUnderFront', name: 'SleeveUnderFront', x: 'SleeveTopFront.x + (Underarm.x - HPS.x)', y: 'Underarm.y' },
+    { id: 'sleeveFrontC1', name: 'SleeveFrontC1', x: 'SleeveTopFront.x + (Underarm.x - RaglanC2.x)', y: 'Underarm.y - RaglanC2.y' },
+    { id: 'sleeveFrontC2', name: 'SleeveFrontC2', x: 'SleeveTopFront.x + (Underarm.x - RaglanC1.x)', y: 'Underarm.y - RaglanC1.y' },
+    { id: 'sleeveUnderBack', name: 'SleeveUnderBack', x: 'SleeveTopBack.x - (Underarm.x - HPS.x)', y: 'Underarm.y' },
+    { id: 'sleeveBackC1', name: 'SleeveBackC1', x: 'SleeveTopBack.x - (Underarm.x - BackRaglanC2.x)', y: 'Underarm.y - BackRaglanC2.y' },
+    { id: 'sleeveBackC2', name: 'SleeveBackC2', x: 'SleeveTopBack.x - (Underarm.x - BackRaglanC1.x)', y: 'Underarm.y - BackRaglanC1.y' },
+    { id: 'sleeveHemFront', name: 'SleeveHemFront', x: 'sleeve_centre + sleeve_hem_half', y: 'Underarm.y + sleeve_length' },
+    { id: 'sleeveHemBack', name: 'SleeveHemBack', x: 'sleeve_centre - sleeve_hem_half', y: 'Underarm.y + sleeve_length' },
+    // Neckband, a plain strip below the body. Its outline winds the other way from the body pieces.
+    { id: 'bandA', name: 'BandA', x: '0', y: 'band_top' },
+    { id: 'bandB', name: 'BandB', x: 'band_length', y: 'band_top' },
+    { id: 'bandC', name: 'BandC', x: 'band_length', y: 'band_top + band_width' },
+    { id: 'bandD', name: 'BandD', x: '0', y: 'band_top + band_width' }
   ],
   segments: [
     { id: 'frontNeck', kind: 'bezier', from: 'hps', c1: 'neckC1', c2: 'neckC2', to: 'cfNeck' },
     { id: 'frontCf', kind: 'line', from: 'cfNeck', to: 'cfHem' },
     { id: 'frontHem', kind: 'line', from: 'cfHem', to: 'sideHem' },
     { id: 'frontSide', kind: 'line', from: 'sideHem', to: 'underarm' },
-    { id: 'frontRaglan', kind: 'bezier', from: 'underarm', c1: 'raglanC2', c2: 'raglanC1', to: 'hps' }
+    { id: 'frontRaglan', kind: 'bezier', from: 'underarm', c1: 'raglanC2', c2: 'raglanC1', to: 'hps' },
+    { id: 'backNeck', kind: 'bezier', from: 'hps', c1: 'backNeckC1', c2: 'backNeckC2', to: 'cbNeck' },
+    { id: 'backCb', kind: 'line', from: 'cbNeck', to: 'cfHem' },
+    { id: 'backRaglan', kind: 'bezier', from: 'underarm', c1: 'backRaglanC1', c2: 'backRaglanC2', to: 'hps' },
+    { id: 'sleeveNeck', kind: 'bezier', from: 'sleeveTopBack', c1: 'sleeveNeckC', c2: 'sleeveNeckC', to: 'sleeveTopFront' },
+    { id: 'sleeveFrontRaglan', kind: 'bezier', from: 'sleeveTopFront', c1: 'sleeveFrontC1', c2: 'sleeveFrontC2', to: 'sleeveUnderFront' },
+    { id: 'sleeveFrontSeam', kind: 'line', from: 'sleeveUnderFront', to: 'sleeveHemFront' },
+    { id: 'sleeveHem', kind: 'line', from: 'sleeveHemFront', to: 'sleeveHemBack' },
+    { id: 'sleeveBackSeam', kind: 'line', from: 'sleeveHemBack', to: 'sleeveUnderBack' },
+    { id: 'sleeveBackRaglan', kind: 'bezier', from: 'sleeveUnderBack', c1: 'sleeveBackC1', c2: 'sleeveBackC2', to: 'sleeveTopBack' },
+    { id: 'bandTop', kind: 'line', from: 'bandA', to: 'bandB' },
+    { id: 'bandRight', kind: 'line', from: 'bandB', to: 'bandC' },
+    { id: 'bandBottom', kind: 'line', from: 'bandC', to: 'bandD' },
+    { id: 'bandLeft', kind: 'line', from: 'bandD', to: 'bandA' }
   ],
   pieces: [
     {
@@ -60,6 +106,52 @@ export const raglanTee: Pattern = {
       grainline: ['cfNeck', 'cfHem'],
       cutCount: 1,
       mirror: true
+    },
+    {
+      id: 'back',
+      name: 'Back',
+      outline: [
+        { segmentId: 'backNeck' },
+        { segmentId: 'backCb' },
+        { segmentId: 'frontHem' },
+        { segmentId: 'frontSide' },
+        { segmentId: 'backRaglan' }
+      ],
+      seamAllowance: { default: 10, perEdge: { frontHem: 25, backCb: 0 } },
+      notches: [{ id: 'backRaglanNotch', segmentId: 'backRaglan', distance: '100' }],
+      grainline: ['cbNeck', 'cfHem'],
+      cutCount: 1,
+      mirror: true
+    },
+    {
+      id: 'sleeve',
+      name: 'Sleeve',
+      outline: [
+        { segmentId: 'sleeveNeck' },
+        { segmentId: 'sleeveFrontRaglan' },
+        { segmentId: 'sleeveFrontSeam' },
+        { segmentId: 'sleeveHem' },
+        { segmentId: 'sleeveBackSeam' },
+        { segmentId: 'sleeveBackRaglan' }
+      ],
+      seamAllowance: { default: 10, perEdge: { sleeveHem: 25 } },
+      notches: [],
+      grainline: ['sleeveNeckC', 'sleeveHemFront'],
+      cutCount: 2
+    },
+    {
+      id: 'neckband',
+      name: 'Neckband',
+      outline: [
+        { segmentId: 'bandTop' },
+        { segmentId: 'bandRight' },
+        { segmentId: 'bandBottom' },
+        { segmentId: 'bandLeft' }
+      ],
+      seamAllowance: { default: 10 },
+      notches: [],
+      grainline: ['bandA', 'bandB'],
+      cutCount: 1
     }
   ]
 }

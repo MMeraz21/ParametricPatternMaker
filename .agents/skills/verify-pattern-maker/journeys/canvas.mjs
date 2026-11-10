@@ -15,7 +15,7 @@ export default async function canvas({ window, evidence, rendererErrors }) {
   // canvas-render
   await marker('HPS').waitFor()
   evidence.check('canvas-render: canvas visible', await canvasEl.isVisible(), true)
-  evidence.check('canvas-render: 9 point markers', await window.getByRole('button', { name: /^Point / }).count(), 9)
+  evidence.check('canvas-render: 29 point markers', await window.getByRole('button', { name: /^Point / }).count(), 29)
   evidence.check('canvas-render: front piece drawn', await window.getByLabel('Piece Front').count(), 1)
   evidence.check('canvas-render: no issues', await window.getByRole('heading', { name: 'Issues (0)' }).isVisible(), true)
   await evidence.screenshot(window, 'canvas-render')
@@ -103,8 +103,9 @@ export default async function canvas({ window, evidence, rendererErrors }) {
   await marker('RaglanC1').locator('circle').click()
   evidence.check('canvas-select: control point badge', await inspector.getByText('Control point').isVisible(), true)
 
-  // canvas-edit
-  await marker('HPS').locator('circle').click()
+  // canvas-edit. The CBNeck label overlaps HPS at this zoom. The canvas picks the nearest marker by position,
+  // so a real click works; force skips Playwright's check for what is on top.
+  await marker('HPS').locator('circle').click({ force: true })
   const hpsBeforeEdit = await centre('HPS')
   const neckC1BeforeEdit = await centre('NeckC1')
   const hpsX = window.getByLabel('HPS x formula')

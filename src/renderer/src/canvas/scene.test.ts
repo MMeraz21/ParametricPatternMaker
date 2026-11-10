@@ -6,27 +6,26 @@ import { buildScene } from './scene'
 const resolved = evaluate(raglanTee, 'M')
 
 describe('buildScene', () => {
-  it('draws the raglan front as one closed piece with every segment', () => {
+  it('draws each raglan piece closed, with every segment in a piece', () => {
     const scene = buildScene(raglanTee, resolved, null)
     const front = resolved.pieces['front']
-    expect(scene.pieces).toEqual([
-      { id: 'front', name: 'Front', d: pathData(front?.outline.map((edge) => edge.curve) ?? [], { closed: true }) }
-    ])
-    expect(scene.segments.map((s) => [s.id, s.inPiece, s.highlighted])).toEqual([
-      ['frontNeck', true, false],
-      ['frontCf', true, false],
-      ['frontHem', true, false],
-      ['frontSide', true, false],
-      ['frontRaglan', true, false]
-    ])
+    expect(scene.pieces.map((p) => p.id)).toEqual(['front', 'back', 'sleeve', 'neckband'])
+    expect(scene.pieces[0]).toEqual({
+      id: 'front',
+      name: 'Front',
+      d: pathData(front?.outline.map((edge) => edge.curve) ?? [], { closed: true })
+    })
+    expect(scene.segments.map((s) => s.id)).toEqual(raglanTee.segments.map((s) => s.id))
+    expect(scene.segments.every((s) => s.inPiece && !s.highlighted)).toBe(true)
     expect(scene.segments[1]?.d).toBe('M 0 90 L 0 690')
   })
 
   it('adds two handles per bezier and puts control markers before anchors', () => {
     const scene = buildScene(raglanTee, resolved, null)
-    expect(scene.handles.map((h) => h.key)).toEqual(['frontNeck:1', 'frontNeck:2', 'frontRaglan:1', 'frontRaglan:2'])
+    expect(scene.handles).toHaveLength(14)
+    expect(scene.handles.slice(0, 4).map((h) => h.key)).toEqual(['frontNeck:1', 'frontNeck:2', 'frontRaglan:1', 'frontRaglan:2'])
     expect(scene.handles[0]).toMatchObject({ anchor: { x: 70, y: 0 }, control: { x: 63, y: 54 } })
-    expect(scene.markers.map((m) => m.role)).toEqual([...Array(4).fill('control'), ...Array(5).fill('anchor')])
+    expect(scene.markers.map((m) => m.role)).toEqual([...Array(13).fill('control'), ...Array(16).fill('anchor')])
   })
 
   it('marks the selected point and highlights the segments that use it', () => {
@@ -43,18 +42,21 @@ describe('buildScene', () => {
   })
 
   it('bounds every point', () => {
-    expect(buildScene(raglanTee, resolved, null).bounds).toEqual({ min: { x: 0, y: 0 }, max: { x: 275, y: 690 } })
+    expect(buildScene(raglanTee, resolved, null).bounds).toEqual({ min: { x: 0, y: -12 }, max: { x: 997, y: 900 } })
   })
 
   it('leaves out a broken point, its segments and its piece, but keeps the rest', () => {
     const pattern = applyEdit(raglanTee, { kind: 'setFormula', owner: { kind: 'point', id: 'cfHem', axis: 'y' }, formula: 'nope' })
     const scene = buildScene(pattern, evaluate(pattern, 'M'), { kind: 'point', id: 'cfHem' })
-    expect(scene.pieces).toEqual([])
+    expect(scene.pieces.map((p) => p.id)).toEqual(['sleeve', 'neckband'])
     expect(scene.markers.map((m) => m.id)).not.toContain('cfHem')
-    expect(scene.segments.map((s) => [s.id, s.inPiece])).toEqual([
+    expect(scene.segments.slice(0, 6).map((s) => [s.id, s.inPiece])).toEqual([
       ['frontNeck', false],
       ['frontSide', false],
-      ['frontRaglan', false]
+      ['frontRaglan', false],
+      ['backNeck', false],
+      ['backRaglan', false],
+      ['sleeveNeck', true]
     ])
   })
 })

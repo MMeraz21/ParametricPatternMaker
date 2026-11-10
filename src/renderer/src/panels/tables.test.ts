@@ -115,7 +115,8 @@ describe('review fixes', () => {
 describe('pointTable', () => {
   it('lists points by name with editable formulas', () => {
     const table = pointTable(raglanTee, resolved, null)
-    expect(table.rows.map((r) => r.name)).toEqual(['HPS', 'CFNeck', 'Underarm', 'SideHem', 'CFHem', 'NeckC1', 'NeckC2', 'RaglanC1', 'RaglanC2'])
+    expect(table.rows.map((r) => r.name)).toEqual(raglanTee.points.map((p) => p.name))
+    expect(table.rows.slice(0, 9).map((r) => r.name)).toEqual(['HPS', 'CFNeck', 'Underarm', 'SideHem', 'CFHem', 'NeckC1', 'NeckC2', 'RaglanC1', 'RaglanC2'])
     expect(text(table, 'HPS', 'x')).toMatchObject({ label: 'HPS x', text: 'neck_width' })
     expect(text(table, 'HPS', 'name').commit('Shoulder')).toEqual({ ok: true, edit: { kind: 'rename', item: { kind: 'point', id: 'hps' }, to: 'Shoulder' } })
     expect(table.add.edit).toMatchObject({ kind: 'add', item: { kind: 'point', point: { id: 'p1', name: 'P_1' } } })
