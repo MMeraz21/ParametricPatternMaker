@@ -83,13 +83,14 @@ describe('rename', () => {
   it('rewrites seam allowance formulas, keeping the text', () => {
     const withAllowances: Pattern = {
       ...raglanTee,
-      pieces: raglanTee.pieces.map((p) => ({
-        ...p,
-        seamAllowance: { default: 'chest_ease + 1', perEdge: { frontHem: ' chest_ease*2 ' } }
-      }))
+      pieces: raglanTee.pieces.map((p) =>
+        p.outline.some(({ segmentId }) => segmentId === 'frontHem')
+          ? { ...p, seamAllowance: { default: 'chest_ease / 10', perEdge: { frontHem: ' chest_ease/4 ' } } }
+          : p
+      )
     }
     const next = applyEdit(withAllowances, { kind: 'rename', item: { kind: 'variable', name: 'chest_ease' }, to: 'ease' })
-    expect(next.pieces[0]?.seamAllowance).toEqual({ default: 'ease + 1', perEdge: { frontHem: ' ease*2 ' } })
+    expect(next.pieces[0]?.seamAllowance).toEqual({ default: 'ease / 10', perEdge: { frontHem: ' ease/4 ' } })
     expect(evaluate(next, 'M').issues).toEqual([])
   })
 

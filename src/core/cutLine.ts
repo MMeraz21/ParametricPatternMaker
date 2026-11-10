@@ -31,13 +31,15 @@ export const MITER_LIMIT = 4
 export const CUT_LINE_BOUND = 0.025
 /** One grid unit, in mm. Shorter edges contribute no chain. */
 export const MIN_EDGE_LENGTH = 0.001
+/** How far a notch mark is cut inward from the cut line, in mm. */
+export const NOTCH_MARK_LENGTH = 6
+/** A cut line point may sit this far past the fold, in mm: rounding to the grid moves it by under this. */
+export const FOLD_TOLERANCE = 0.001
 
 /** 100 m, in mm. Keeps every coordinate well inside the integer range of the union. */
 const MAX_COORDINATE = 1e5
 /** An allowance this small, in mm, is a zero edge. */
 const ZERO_ALLOWANCE = 1e-6
-/** A cut line point may sit this far past the fold, in mm: rounding to the grid moves it by under this. */
-const FOLD_TOLERANCE = 0.001
 /** Seam area outside the ring allowed per mm of outline, in mm²: the two flattenings of a zero edge differ. */
 const SEAM_SLIVER_PER_MM = 0.05
 
@@ -111,6 +113,33 @@ interface Corner {
   readonly vertices: readonly OwnedVertex[]
   /** Who owns the raw segment that arrives at the second edge's first point. */
   readonly arrivingOwner: number
+}
+
+/** The unit normal pointing out of a piece, for a unit tangent in outline direction. y is down. */
+export function outwardNormal(tangent: Vec2, orientation: Orientation): Vec2 {
+  return orientation === 'clockwise' ? { x: tangent.y, y: -tangent.x } : { x: -tangent.y, y: tangent.x }
+}
+
+/** Where a ray first crosses the ring. Undefined if it never does. */
+function rayExit(origin: Vec2, direction: Vec2, ring: readonly Vec2[]): Vec2 | undefined {
+  let nearest = Infinity
+  ring.forEach((a, i) => {
+    const edge = sub(ring[(i + 1) % ring.length] ?? a, a)
+    const determinant = cross(direction, edge)
+    if (determinant === 0) return
+    const toEdge = sub(a, origin)
+    const along = cross(toEdge, edge) / determinant
+    const across = cross(toEdge, direction) / determinant
+    if (along > 1e-9 && along < nearest && across >= 0 && across <= 1) nearest = along
+  })
+  return nearest === Infinity ? undefined : add(origin, scale(direction, nearest))
+}
+
+/** Where a seam notch reaches the cut line, and its mark. Every seam notch gets one. */
+export function placeCutNotch(notchId: Id, point: Vec2, outward: Vec2, allowance: number, ring: readonly Vec2[]): CutNotch {
+  // Under one grid unit the ring sits on the seam, so a ray from it would skip to whatever edge is next.
+  const at = allowance < MIN_EDGE_LENGTH ? point : (rayExit(point, outward, ring) ?? add(point, scale(outward, allowance)))
+  return { notchId, at, mark: [at, sub(at, scale(outward, NOTCH_MARK_LENGTH))] }
 }
 
 /** Where the two offset tangent lines meet. Undefined for parallel normals. */
@@ -276,7 +305,7 @@ const inRange = ({ edge, allowance }: EdgeAllowance): boolean =>
 /** Total and pure: every input yields a result. Never throws. `fold` is the id of the edge cut on the fold. */
 export function buildCutLine(input: readonly EdgeAllowance[], orientation: Orientation, fold?: Id): CutLineResult {
   const failed = (failure: CutLineFailure): CutLineResult => ({ ok: false, failure })
-  const outward = (t: Vec2): Vec2 => (orientation === 'clockwise' ? { x: t.y, y: -t.x } : { x: -t.y, y: t.x })
+  const outward = (tangent: Vec2): Vec2 => outwardNormal(tangent, orientation)
 
   if (!input.every(inRange)) return failed({ kind: 'out-of-range' })
 

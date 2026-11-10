@@ -1,3 +1,4 @@
+import type { CutLineFailure } from './cutLine'
 import { compileFormula, evaluateExpr, isValidName, referenceKey, type Axis, type Expr, type Reference } from './formula'
 import { topologicalSort } from './graph'
 import { visitPieceFormulas, type Id, type Pattern, type Piece, type PieceFormulaOwner, type SizeName } from './model'
@@ -46,6 +47,17 @@ export type EvaluationIssue =
   | { kind: 'notch-out-of-range'; item: ItemRef; distance: number; length: number; message: string }
   | { kind: 'notch-on-degenerate-segment'; item: ItemRef; message: string }
   | { kind: 'negative-seam-allowance'; item: ItemRef; value: number; message: string }
+  | { kind: 'unknown-seam-allowance-edge'; item: ItemRef; segmentId: Id; message: string }
+  | { kind: 'fold-edge-has-allowance'; item: ItemRef; segmentId: Id; message: string }
+  | {
+      kind: 'invalid-fold-edge'
+      item: ItemRef
+      segmentId: Id
+      reason: 'not-in-outline' | 'not-straight' | 'piece-crosses-line'
+      message: string
+    }
+  | { kind: 'degenerate-grainline'; item: ItemRef; message: string }
+  | { kind: 'cut-line-failed'; item: ItemRef; failure: CutLineFailure; message: string }
 
 export interface ResolvedPoint {
   id: Id
@@ -347,11 +359,14 @@ export function evaluate(pattern: Pattern, size: SizeName): ResolvedPattern {
   const pointNames = new Map<Id, string>()
   for (const { id, name } of pattern.points) if (!pointNames.has(id)) pointNames.set(id, name)
   const notchDistances = new Map<string, number>()
+  const allowances = new Map<string, number>()
   for (const { key, item } of formulaNodes) {
     const value = values.get(key)
-    if (item.kind === 'notch' && value !== undefined) notchDistances.set(key, value)
+    if (value === undefined) continue
+    if (item.kind === 'notch') notchDistances.set(key, value)
+    else if (item.kind === 'seamAllowance') allowances.set(key, value)
   }
-  const geometry = resolveGeometry({ pattern, points, pointNames, notchDistances })
+  const geometry = resolveGeometry({ pattern, points, pointNames, notchDistances, allowances })
   issues.push(...geometry.issues)
 
   return {

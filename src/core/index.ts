@@ -40,9 +40,12 @@ export {
   type FlatOutline,
   type Orientation,
   type OutlineEdge,
+  type ResolvedFold,
+  type ResolvedGrainline,
   type ResolvedNotch,
   type ResolvedPiece,
   type ResolvedSegment
 } from './outline'
+export type { CutLine, CutLineFailure, CutNotch, CutSpan } from './cutLine'
 export * from './edit'
 export * from './units'

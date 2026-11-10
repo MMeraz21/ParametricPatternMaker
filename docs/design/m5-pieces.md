@@ -138,9 +138,10 @@ export interface CutNotch { readonly notchId: Id; readonly at: Vec2; readonly ma
 ```
 
 `CutNotch.at` is where a ray from the seam notch along `outward` first leaves the ring (`rayExit`). A
-fixed `point + allowance·outward` would miss the cut line next to a reflex corner. The ray always
-exits, because the ring is checked to contain every source point, and a notch on a zero-allowance edge
-returns its own point. So no notch can fail here and no issue kind is needed.
+fixed `point + allowance·outward` would miss the cut line next to a reflex corner. An allowance under one
+grid unit, zero included, returns the notch's own point, because the ring then sits on the seam and a ray
+from it would skip to the next edge. If a ray ever found nothing, the notch falls back to
+`point + allowance·outward`. So every seam notch gets a mark and no issue kind is needed.
 
 ### How curves are flattened and offset, and why grading stays accurate
 

@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as core from './index'
+import type { CutLine, CutLineFailure, CutNotch, CutSpan, ResolvedFold, ResolvedGrainline } from './index'
 
 describe('the public core API', () => {
   it.each(['offsetCurve', 'startTangent', 'endTangent', 'OFFSET_TOLERANCE'])('keeps %s internal to the cut line code', (name) => {
@@ -14,6 +15,18 @@ describe('the public core API', () => {
 
   it('still exports the geometry the renderer and export use', () => {
     expect(Object.keys(core)).toEqual(expect.arrayContaining(['pathData', 'polygonPathData', 'distance', 'curveLength', 'flatten', 'vec']))
+  })
+})
+
+describe('the cut line types the renderer and export read', () => {
+  it('are exported, which typecheck proves by compiling this', () => {
+    const notch: CutNotch = { notchId: 'n', at: core.vec(0, 0), mark: [core.vec(0, 0), core.vec(0, 1)] }
+    const span: CutSpan = { kind: 'join', after: 'a', before: 'b', points: [] }
+    const line: CutLine = { ring: [], spans: [span], notches: [notch] }
+    const failure: CutLineFailure = { kind: 'out-of-range' }
+    const fold: ResolvedFold = { segmentId: 's', from: core.vec(0, 0), to: core.vec(0, 1) }
+    const grainline: ResolvedGrainline = { from: core.vec(0, 0), to: core.vec(0, 1), angle: 0 }
+    expect([line.spans.length, failure.kind, fold.segmentId, grainline.angle]).toEqual([1, 'out-of-range', 's', 0])
   })
 })
 
