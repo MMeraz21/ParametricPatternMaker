@@ -286,43 +286,42 @@ function patchPiece(piece: Piece, { fold, stackPoint, ...fields }: PiecePatch): 
   return unchanged(next, piece) ? piece : next
 }
 
+/** The new size list, with every measurement's values rewritten for it. */
+function withSizes(pattern: Pattern, sizes: readonly SizeName[], rewrite: (values: Measurement['values']) => Measurement['values']): Pattern {
+  const [first, ...rest] = sizes
+  if (first === undefined) return pattern
+  return { ...pattern, sizes: [first, ...rest], measurements: pattern.measurements.map((measurement) => ({ ...measurement, values: rewrite(measurement.values) })) }
+}
+
+const entriesExcept = (values: Measurement['values'], name: SizeName): [SizeName, number][] => Object.entries(values).filter(([size]) => size !== name)
+
 function addSize(pattern: Pattern, name: SizeName, after: SizeName): Pattern {
   const index = pattern.sizes.indexOf(after)
   if (index === -1 || checkSizeName(pattern, name)) return pattern
-  const [first, ...rest] = pattern.sizes.toSpliced(index + 1, 0, name)
-  if (first === undefined) return pattern
-  const measurements = pattern.measurements.map((measurement) => {
-    const value = measurement.values[after]
+  return withSizes(pattern, pattern.sizes.toSpliced(index + 1, 0, name), (values) => {
+    const value = values[after]
     // Dropping a leftover key first, so a measurement with nothing to copy stays without a value.
-    const others = Object.entries(measurement.values).filter(([size]) => size !== name)
-    return { ...measurement, values: Object.fromEntries(value === undefined ? others : [...others, [name, value]]) }
+    const others = entriesExcept(values, name)
+    return Object.fromEntries(value === undefined ? others : [...others, [name, value]])
   })
-  return { ...pattern, sizes: [first, ...rest], measurements }
 }
 
 function removeSize(pattern: Pattern, name: SizeName): Pattern {
-  const [first, ...rest] = pattern.sizes.filter((size) => size !== name)
-  if (first === undefined || rest.length + 1 === pattern.sizes.length) return pattern
-  const measurements = pattern.measurements.map((measurement) => ({
-    ...measurement,
-    values: Object.fromEntries(Object.entries(measurement.values).filter(([size]) => size !== name))
-  }))
-  return { ...pattern, sizes: [first, ...rest], measurements }
+  if (!pattern.sizes.includes(name)) return pattern
+  return withSizes(
+    pattern,
+    pattern.sizes.filter((size) => size !== name),
+    (values) => Object.fromEntries(entriesExcept(values, name))
+  )
 }
 
 function renameSize(pattern: Pattern, from: SizeName, to: SizeName): Pattern {
   if (from === to || !pattern.sizes.includes(from) || checkSizeName(pattern, to, from)) return pattern
-  const [first, ...rest] = pattern.sizes.map((size) => (size === from ? to : size))
-  if (first === undefined) return pattern
-  const measurements = pattern.measurements.map((measurement) => ({
-    ...measurement,
-    values: Object.fromEntries(
-      Object.entries(measurement.values)
-        .filter(([size]) => size !== to)
-        .map(([size, value]) => [size === from ? to : size, value])
-    )
-  }))
-  return { ...pattern, sizes: [first, ...rest], measurements }
+  return withSizes(
+    pattern,
+    pattern.sizes.map((size) => (size === from ? to : size)),
+    (values) => Object.fromEntries(entriesExcept(values, to).map(([size, value]) => [size === from ? to : size, value]))
+  )
 }
 
 function add(pattern: Pattern, item: NewItem): Pattern {

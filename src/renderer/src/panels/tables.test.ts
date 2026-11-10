@@ -69,7 +69,8 @@ describe('measurementTable', () => {
     const pattern: Pattern = { ...raglanTee, measurements: [{ name: 'chest', values: { S: 920 } }, ...raglanTee.measurements.slice(1)] }
     const t = measurementTable(pattern, viewOf(pattern), null)
     expect(text(t, 'chest', 'size:M')).toMatchObject({ text: '', issues: [{ kind: 'missing-measurement-value' }] })
-    expect(text(t, 'chest', 'size:L').issues).toMatchObject([{ kind: 'missing-measurement-value' }])
+    expect(text(t, 'chest', 'size:M').issues).toMatchObject([{ here: true, text: "Measurement 'chest' has no value for size 'M'" }])
+    expect(text(t, 'chest', 'size:L').issues).toMatchObject([{ kind: 'missing-measurement-value', here: false, text: "Measurement 'chest' has no value for size 'L'" }])
     expect(text(t, 'chest', 'size:S').issues).toEqual([])
   })
 })
@@ -411,6 +412,14 @@ describe('pieceTable stack point', () => {
     expect(text(t, 'Sleeve', 'stackPoint').commit('Nope')).toEqual({ ok: false, message: "No point named 'Nope'" })
   })
 
+  it('tells a stack point failure from a grainline failure on the same point', () => {
+    const withBroken: Pattern = { ...raglanTee, points: [...raglanTee.points, { id: 'both', name: 'Both', x: 'nope', y: '0' }] }
+    const pattern = applyEdit(withBroken, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: 'both', grainline: ['both', 'cfHem'] } })
+    const u = pieceTable(pattern, viewOf(pattern), null)
+    expect(text(u, 'Front', 'stackPoint').issues.map((issue) => issue.message)).toEqual(["Piece 'Front' has a stack point on 'Both', which could not be evaluated"])
+    expect(text(u, 'Front', 'grainFrom').issues.map((issue) => issue.message)).toEqual(["Piece 'Front' has a grainline on 'Both', which could not be evaluated"])
+  })
+
   it('shows a missing stack point in its own column', () => {
     const pattern = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: 'ghost' } })
     const u = pieceTable(pattern, viewOf(pattern), null)
@@ -432,6 +441,7 @@ describe('sizeTable', () => {
     ])
     expect(t.add).toEqual({ label: 'Add size', edit: { kind: 'addSize', name: 'Size 1', after: 'L' } })
     expect(t.rows.every((r) => r.key === null)).toBe(true)
+    expect(t.rows.map((r) => r.id)).toEqual(['S', 'M', 'L', 'XL', 'XXL'])
   })
 
   it('renames through the name cell and refuses bad names', () => {

@@ -107,7 +107,6 @@ function issueIdentity(issue: LocatedIssue): string {
     case 'missing-measurement-value':
     case 'parse-error':
     case 'cycle':
-    case 'dependency-failed':
     case 'not-finite':
     case 'outline-empty':
     case 'degenerate-outline':
@@ -119,8 +118,10 @@ function issueIdentity(issue: LocatedIssue): string {
     case 'undefined-reference':
     case 'invalid-reference':
       return of(issue.reference)
+    case 'dependency-failed':
+      return of(issue.role ?? '')
     case 'missing-point':
-      return of(issue.pointId)
+      return of(issue.pointId, issue.role ?? '')
     case 'missing-segment':
     case 'duplicate-outline-segment':
     case 'notch-off-outline':
@@ -206,8 +207,11 @@ function nestAt(pieces: readonly GradedPiece[], shown: SizeName, sizeOrder: read
   const gaps: NestGap[] = []
   for (const { id, name, atSizes } of pieces) {
     const isPlaced = (at: PieceAtSize): at is Extract<PieceAtSize, { kind: 'placed' }> => at.kind === 'placed'
-    const reference = atSizes.find((at) => isPlaced(at) && at.size === shown) ?? atSizes.find(isPlaced)
+    const shownAt = atSizes.find((at) => at.size === shown)
+    const reference = (shownAt && isPlaced(shownAt) ? shownAt : undefined) ?? atSizes.find(isPlaced)
     const anchor = reference && isPlaced(reference) ? reference.stackAt : null
+    // The shown piece is drawn where it was drafted with nothing to stack on, so ghosts around it would look like a grading error.
+    const canStack = shownAt?.kind !== 'no-stack-point'
     for (const at of atSizes) {
       const gap = (reason: NestGap['reason']): void => void gaps.push({ size: at.size, pieceId: id, pieceName: name, reason })
       if (at.kind !== 'placed') {
@@ -215,7 +219,7 @@ function nestAt(pieces: readonly GradedPiece[], shown: SizeName, sizeOrder: read
         continue
       }
       if (!at.piece.cutLine) gap('no-cut-line')
-      if (at.size === shown) continue
+      if (at.size === shown || !canStack) continue
       ghosts.push({ size: at.size, sizeIndex: sizeOrder.indexOf(at.size), piece: at.piece, offset: anchor && at.stackAt ? sub(anchor, at.stackAt) : vec(0, 0) })
     }
   }

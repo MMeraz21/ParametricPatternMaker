@@ -26,7 +26,7 @@ import {
   type Curve,
   type Vec2
 } from './geometry'
-import type { EvaluationIssue, ItemRef, ResolvedPoint } from './evaluate'
+import type { EvaluationIssue, ItemRef, PiecePointRole, ResolvedPoint } from './evaluate'
 import { segmentPointIds, type Id, type Pattern, type Piece, type Segment } from './model'
 
 /**
@@ -388,28 +388,31 @@ function resolvePiece(
   }
 }
 
-/** A point a piece refers to by id. A point that isn't there, or didn't evaluate, is reported on the piece. */
-function resolvePiecePoint(id: Id, usedAs: string, piece: Piece, item: ItemRef, { points, pointNames }: GeometryInput, issues: EvaluationIssue[]): ResolvedPoint | undefined {
+/** A point a piece refers to by id. A point that isn't there, or didn't evaluate, is reported on the piece, saying which reference it was. */
+function resolvePiecePoint(id: Id, role: PiecePointRole, piece: Piece, item: ItemRef, { points, pointNames }: GeometryInput, issues: EvaluationIssue[]): ResolvedPoint | undefined {
   // hasOwn: an id such as 'constructor' must not find what every object inherits.
   if (Object.hasOwn(points, id) && points[id]) return points[id]
+  const usedAs = role === 'stack-point' ? 'stack point' : 'grainline'
   const name = pointNames.get(id)
   if (name === undefined) {
-    issues.push({ kind: 'missing-point', item, pointId: id, message: `Piece '${piece.name}' has a ${usedAs} on missing point '${id}'` })
+    issues.push({ kind: 'missing-point', item, pointId: id, role, message: `Piece '${piece.name}' has a ${usedAs} on missing point '${id}'` })
   } else {
-    issues.push({ kind: 'dependency-failed', item, dependency: name, message: `Piece '${piece.name}' has a ${usedAs} on '${name}', which could not be evaluated` })
+    issues.push({ kind: 'dependency-failed', item, dependency: name, role, message: `Piece '${piece.name}' has a ${usedAs} on '${name}', which could not be evaluated` })
   }
   return undefined
 }
 
 function resolveStackPoint(piece: Piece, item: ItemRef, input: GeometryInput, issues: EvaluationIssue[]): Vec2 | undefined {
   if (piece.stackPoint === undefined) return undefined
-  const point = resolvePiecePoint(piece.stackPoint, 'stack point', piece, item, input, issues)
+  const point = resolvePiecePoint(piece.stackPoint, 'stack-point', piece, item, input, issues)
   return point && vec(point.x, point.y)
 }
 
 function resolveGrainline(piece: Piece, item: ItemRef, input: GeometryInput, issues: EvaluationIssue[]): ResolvedGrainline | undefined {
-  const resolve = (id: Id): ResolvedPoint | undefined => resolvePiecePoint(id, 'grainline', piece, item, input, issues)
-  const [from, to] = [resolve(piece.grainline[0]), resolve(piece.grainline[1])]
+  const [from, to] = [
+    resolvePiecePoint(piece.grainline[0], 'grain-from', piece, item, input, issues),
+    resolvePiecePoint(piece.grainline[1], 'grain-to', piece, item, input, issues)
+  ]
   if (!from || !to) return undefined
   if (distance(from, to) < DEGENERATE_LENGTH) {
     issues.push({ kind: 'degenerate-grainline', item, message: `Piece '${piece.name}' has a grainline between two points in the same place` })

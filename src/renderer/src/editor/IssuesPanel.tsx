@@ -1,4 +1,5 @@
 import type { ShownIssue } from '@core'
+import { issueTextClass } from './inspect'
 
 interface IssuesPanelProps {
   issues: readonly ShownIssue[]
@@ -20,7 +21,7 @@ export function IssuesPanel({ issues, onOpen }: IssuesPanelProps) {
       ) : (
         <ul className="space-y-1">
           {issues.map((issue) => (
-            <li key={issue.key} className={`text-sm ${issue.here ? 'text-red-700' : 'text-amber-700'}`}>
+            <li key={issue.key} className={`text-sm ${issueTextClass(issue)}`}>
               <button type="button" className="text-left hover:underline" onClick={() => onOpen(issue)}>
                 {wording(issue)}
               </button>

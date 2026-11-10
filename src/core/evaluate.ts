@@ -16,6 +16,9 @@ export type ItemRef =
   /** A `segmentId` of null is the piece's default allowance. */
   | { kind: 'seamAllowance'; pieceId: Id; segmentId: Id | null }
 
+/** Which of a piece's point references an issue is about. Absent when it isn't about one of them. */
+export type PiecePointRole = 'grain-from' | 'grain-to' | 'stack-point'
+
 export type EvaluationIssue =
   | { kind: 'unknown-size'; size: SizeName; message: string }
   | { kind: 'invalid-name'; item: ItemRef; message: string }
@@ -26,9 +29,9 @@ export type EvaluationIssue =
   | { kind: 'undefined-reference'; item: ItemRef; reference: string; message: string }
   | { kind: 'invalid-reference'; item: ItemRef; reference: string; message: string }
   | { kind: 'cycle'; item: ItemRef; cycle: string[]; message: string }
-  | { kind: 'dependency-failed'; item: ItemRef; dependency: string; message: string }
+  | { kind: 'dependency-failed'; item: ItemRef; dependency: string; role?: PiecePointRole; message: string }
   | { kind: 'not-finite'; item: ItemRef; message: string }
-  | { kind: 'missing-point'; item: ItemRef; pointId: Id; message: string }
+  | { kind: 'missing-point'; item: ItemRef; pointId: Id; role?: PiecePointRole; message: string }
   | { kind: 'missing-segment'; item: ItemRef; segmentId: Id; message: string }
   | { kind: 'outline-empty'; item: ItemRef; message: string }
   | { kind: 'duplicate-outline-segment'; item: ItemRef; segmentId: Id; message: string }

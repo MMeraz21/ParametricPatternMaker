@@ -82,12 +82,25 @@ describe('evaluateGraded', () => {
     expect(dependents).toHaveLength(1)
   })
 
-  it('keeps two reports of the same kind about one piece apart by their order', () => {
-    const pattern = edited({ kind: 'setPiece', pieceId: 'front', patch: { grainline: ['ghost', 'ghost'] } })
-    const issues = evaluateGraded(pattern).issues.filter((issue) => issue.kind === 'missing-point')
+  it('keeps two identical reports apart by their order', () => {
+    const pattern: Pattern = { ...raglanTee, measurements: [...raglanTee.measurements, { name: 'chest', values: {} }, { name: 'chest', values: {} }] }
+    const issues = evaluateGraded(pattern).issues.filter((issue) => issue.kind === 'duplicate-name')
     expect(issues).toHaveLength(2)
     expect(new Set(issues.map((issue) => issue.key)).size).toBe(2)
     expect(issues.every((issue) => issue.inEverySize)).toBe(true)
+  })
+
+  it('keeps a stack point failure apart from a grainline failure on the same piece', () => {
+    const base: Pattern = {
+      ...raglanTee,
+      points: [...raglanTee.points, { id: 'stackAlways', name: 'StackAlways', x: 'nope', y: '0' }, { id: 'grainXxl', name: 'GrainXxl', x: 'chest > 1200 ? 1 / 0 : 5', y: '0' }]
+    }
+    const pattern = applyEdit(base, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: 'stackAlways', grainline: ['grainXxl', 'cfHem'] } })
+    const about = evaluateGraded(pattern).issues.filter((issue) => issue.kind === 'dependency-failed' && issue.item.kind === 'piece')
+    expect(about.map((issue) => [issue.kind === 'dependency-failed' && issue.dependency, issue.sizes.join()])).toEqual([
+      ['StackAlways', 'S,M,L,XL,XXL'],
+      ['GrainXxl', 'XXL']
+    ])
   })
 
   it('has keys that do not change between evaluations', () => {
@@ -237,6 +250,19 @@ describe('the nest', () => {
       ['L', { x: 0, y: -40 }],
       ['XL', { x: 0, y: -60 }]
     ])
+  })
+
+  it('draws no ghosts around a shown piece that has nothing to stack on', () => {
+    const base: Pattern = {
+      ...raglanTee,
+      variables: [...raglanTee.variables, { name: 'stack_x', formula: 'chest == 1000 ? 1 / 0 : 5' }],
+      points: [...raglanTee.points, { id: 'stackHere', name: 'StackHere', x: 'stack_x', y: '0' }],
+      pieces: raglanTee.pieces.map((piece) => (piece.id === 'front' ? { ...piece, stackPoint: 'stackHere' } : piece))
+    }
+    const { ghosts, gaps } = viewAt(evaluateGraded(base), 'M').nest
+    expect(ghosts.filter((ghost) => ghost.piece.id === 'front')).toEqual([])
+    expect(ghosts.filter((ghost) => ghost.piece.id === 'back')).toHaveLength(4)
+    expect(gaps).toEqual([{ size: 'M', pieceId: 'front', pieceName: 'Front', reason: 'no-stack-point' }])
   })
 
   it('reports a stack point that fails in one size as a gap without moving the rest', () => {

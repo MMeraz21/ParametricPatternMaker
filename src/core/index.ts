@@ -2,7 +2,7 @@ export * from './model'
 export * from './formula'
 export * from './graph'
 // evaluate() itself stays internal: the app reads every size through evaluateGraded and viewAt.
-export type { EvaluationIssue, ItemRef, LocatedIssue, ResolvedPattern, ResolvedPoint } from './evaluate'
+export type { EvaluationIssue, ItemRef, LocatedIssue, PiecePointRole, ResolvedPattern, ResolvedPoint } from './evaluate'
 export * from './graded'
 // Named, not `export *`: the offset functions belong to the cut line code and stay out of the public API.
 export {

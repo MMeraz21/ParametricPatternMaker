@@ -58,11 +58,15 @@ export function inspectPoint(pattern: Pattern, view: SizeView, id: Id): PointIns
   }
 }
 
-/** Red for a problem in the size on screen, amber for one only in other sizes, null for no problem. */
-export function issueTone(issues: readonly ShownIssue[]): 'here' | 'elsewhere' | null {
-  if (issues.length === 0) return null
+/** Red for a problem in the size on screen, amber for one only in other sizes. */
+export function issueTone(issues: readonly ShownIssue[]): 'here' | 'elsewhere' | 'none' {
+  if (issues.length === 0) return 'none'
   return issues.some((issue) => issue.here) ? 'here' : 'elsewhere'
 }
+
+export const issueTextClass = (issue: ShownIssue): string => (issue.here ? 'text-red-700' : 'text-amber-700')
+
+export const ISSUE_BORDER_CLASS = { here: 'border-red-400 focus:ring-red-200', elsewhere: 'border-amber-400 focus:ring-amber-200' } as const
 
 /** Where clicking an issue takes you: the measurement, variable or point it is about. */
 export function selectionForIssue({ item }: LocatedIssue): Selection {

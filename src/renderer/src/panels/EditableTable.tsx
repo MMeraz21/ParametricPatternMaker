@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ItemKey, PatternEdit } from '@core'
-import { issueTone } from '../editor/inspect'
+import { ISSUE_BORDER_CLASS, issueTone } from '../editor/inspect'
 import type { TableModel, TextCell } from './tables'
 
 interface EditableTableProps {
@@ -145,7 +145,7 @@ function EditableCell({ cell, numeric, onEdit }: EditableCellProps) {
         }}
         className={`w-full rounded border bg-transparent px-1 py-0.5 font-mono outline-none focus:bg-white focus:ring-2 ${
           numeric ? 'text-right tabular-nums' : ''
-        } ${{ here: 'border-red-400 focus:ring-red-200', elsewhere: 'border-amber-400 focus:ring-amber-200', none: 'border-transparent hover:border-neutral-200 focus:ring-sky-200' }[tone ?? 'none']}`}
+        } ${{ ...ISSUE_BORDER_CLASS, none: 'border-transparent hover:border-neutral-200 focus:ring-sky-200' }[tone]}`}
       />
       {error && (
         <p role="alert" className="px-1 text-xs text-red-700">

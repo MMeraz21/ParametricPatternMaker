@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { UNIT_LABEL, formatLength, type Axis, type DisplayUnits, type PatternEdit } from '@core'
-import { issueTone, type AxisInspection, type PointInspection } from './inspect'
+import { ISSUE_BORDER_CLASS, issueTextClass, issueTone, type AxisInspection, type PointInspection } from './inspect'
 
 interface InspectorProps {
   inspection: PointInspection | null
@@ -30,7 +30,7 @@ export function Inspector({ inspection, units, onEdit }: InspectorProps) {
         </p>
       )}
       {inspection.pointIssues.map((issue) => (
-        <p key={issue.key} className={`text-sm ${issue.here ? 'text-red-700' : 'text-amber-700'}`}>
+        <p key={issue.key} className={`text-sm ${issueTextClass(issue)}`}>
           {issue.text}
         </p>
       ))}
@@ -86,11 +86,11 @@ function AxisField({ name, axis, inspection, units, onCommit }: AxisFieldProps) 
           if (e.key === 'Escape') setDraft(inspection.formula)
         }}
         className={`w-full rounded border px-2 py-1 font-mono text-sm outline-none focus:ring-2 ${
-          { here: 'border-red-400 focus:ring-red-200', elsewhere: 'border-amber-400 focus:ring-amber-200', none: 'border-neutral-300 focus:ring-sky-200' }[issueTone(inspection.issues) ?? 'none']
+          { ...ISSUE_BORDER_CLASS, none: 'border-neutral-300 focus:ring-sky-200' }[issueTone(inspection.issues)]
         }`}
       />
       {inspection.issues.map((issue) => (
-        <p key={issue.key} className={`text-xs ${issue.here ? 'text-red-700' : 'text-amber-700'}`}>
+        <p key={issue.key} className={`text-xs ${issueTextClass(issue)}`}>
           {issue.text}
         </p>
       ))}

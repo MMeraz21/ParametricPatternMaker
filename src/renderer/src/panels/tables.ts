@@ -91,6 +91,13 @@ const column = (id: string, header: string, options: Partial<Pick<Column, 'numer
 
 const issuesAbout = (view: SizeView, matches: (item: ItemRef) => boolean): ShownIssue[] => view.issues.filter((issue) => matches(issue.item))
 
+/** A value cell belongs to one size, so it reads as that size's report and is only red in the size on screen. */
+const ofColumn = (issue: ShownIssue, size: string, view: SizeView): ShownIssue => ({
+  ...issue,
+  here: size === view.size,
+  text: issue.instances.find((instance) => instance.size === size)?.issue.message ?? issue.text
+})
+
 const NAME_ISSUES = new Set<ShownIssue['kind']>(['invalid-name', 'duplicate-name', 'duplicate-id'])
 
 function nameCell(pattern: Pattern, key: NamedItemKey, name: string, issues: readonly ShownIssue[]): TextCell {
@@ -140,7 +147,7 @@ export function measurementTable(pattern: Pattern, view: SizeView, selection: Se
         columnId: `size:${size}`,
         label: `${measurement.name} ${size}`,
         text,
-        issues: issues.filter((issue) => issue.kind === 'missing-measurement-value' && issue.sizes.includes(size)),
+        issues: issues.filter((issue) => issue.kind === 'missing-measurement-value' && issue.sizes.includes(size)).map((issue) => ofColumn(issue, size, view)),
         commit: (draft) => {
           // Typed in display units. Committing the displayed (rounded) text unchanged keeps the exact mm.
           if (draft.trim() === text) return { ok: true, edit: null }
@@ -300,17 +307,21 @@ function pieceCell(columnId: string, label: string, text: string, issues: readon
   return { kind: 'text', columnId, label, text, issues, commit: (draft) => (draft === text ? { ok: true, edit: null } : commit(draft)) }
 }
 
-/** Whether an issue about a piece is that one of the points it refers to failed. */
-const failsOnPoint = (pattern: Pattern, issue: ShownIssue, id: string): boolean =>
-  (issue.kind === 'missing-point' && issue.pointId === id) || (issue.kind === 'dependency-failed' && issue.dependency === pointLabel(pattern, id))
-
 /** Which column of the piece table an issue about the piece belongs in. */
-function pieceIssueColumn(pattern: Pattern, piece: Piece, issue: ShownIssue): 'grainFrom' | 'grainTo' | 'fold' | 'stackPoint' | 'name' {
-  const [from, to] = piece.grainline
+function pieceIssueColumn(issue: ShownIssue): 'grainFrom' | 'grainTo' | 'fold' | 'stackPoint' | 'name' {
   if (issue.kind === 'invalid-fold-edge') return 'fold'
-  if (issue.kind === 'degenerate-grainline' || failsOnPoint(pattern, issue, from)) return 'grainFrom'
-  if (failsOnPoint(pattern, issue, to)) return 'grainTo'
-  return piece.stackPoint !== undefined && failsOnPoint(pattern, issue, piece.stackPoint) ? 'stackPoint' : 'name'
+  if (issue.kind === 'degenerate-grainline') return 'grainFrom'
+  if (issue.kind !== 'missing-point' && issue.kind !== 'dependency-failed') return 'name'
+  switch (issue.role) {
+    case 'grain-from':
+      return 'grainFrom'
+    case 'grain-to':
+      return 'grainTo'
+    case 'stack-point':
+      return 'stackPoint'
+    default:
+      return 'name'
+  }
 }
 
 const notAnEdge = (piece: Piece, segmentId: string): CommitResult => ({ ok: false, message: `'${segmentId}' is not an edge of ${piece.name}` })
@@ -333,7 +344,7 @@ export function pieceTable(pattern: Pattern, view: SizeView, selection: Selectio
     seen.add(piece.id)
     const key: ItemKey = { kind: 'piece', id: piece.id }
     const pieceIssues = issuesAbout(view, (item) => item.kind === 'piece' && item.id === piece.id)
-    const issuesIn = (columnId: ReturnType<typeof pieceIssueColumn>): ShownIssue[] => pieceIssues.filter((issue) => pieceIssueColumn(pattern, piece, issue) === columnId)
+    const issuesIn = (columnId: ReturnType<typeof pieceIssueColumn>): ShownIssue[] => pieceIssues.filter((issue) => pieceIssueColumn(issue) === columnId)
     const [grainFrom, grainTo] = piece.grainline
     const grainCell = (columnId: 'grainFrom' | 'grainTo', label: string, current: string, update: (id: string) => [string, string]): TextCell => ({
       kind: 'text',
@@ -368,8 +379,7 @@ export function pieceTable(pattern: Pattern, view: SizeView, selection: Selectio
           'stackPoint',
           `${piece.name} stack point`,
           piece.stackPoint === undefined ? '' : pointLabel(pattern, piece.stackPoint),
-          // A stack point can share a point with the grainline, so a failure there is shown in both.
-          pieceIssues.filter((issue) => piece.stackPoint !== undefined && failsOnPoint(pattern, issue, piece.stackPoint)),
+          issuesIn('stackPoint'),
           (draft) => {
             if (draft.trim() === '') return { ok: true, edit: setPiece(piece, { stackPoint: null }) }
             return commitPoint(pattern, draft, piece.stackPoint ?? '', (id) => setPiece(piece, { stackPoint: id }))
@@ -475,8 +485,9 @@ export function notchTable(pattern: Pattern, view: SizeView, piece: Piece): Tabl
 }
 
 export function sizeTable(pattern: Pattern, view: SizeView): TableModel {
-  const rows = pattern.sizes.map((size, index): Row => ({
-    id: String(index),
+  const rows = pattern.sizes.map((size): Row => ({
+    // By name: a rejected draft must not move to another size when a row above it is removed.
+    id: size,
     key: null,
     name: size,
     selected: size === view.size,
