@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyEdit, evaluate, pathData } from '@core'
+import { applyEdit, evaluate, pathData, polygonPathData } from '@core'
 import { raglanTee } from '@core/fixtures/raglan'
 import { buildScene } from './scene'
 
@@ -10,7 +10,7 @@ describe('buildScene', () => {
     const scene = buildScene(raglanTee, resolved, null)
     const front = resolved.pieces['front']
     expect(scene.pieces.map((p) => p.id)).toEqual(['front', 'back', 'sleeve', 'neckband'])
-    expect(scene.pieces[0]).toEqual({
+    expect(scene.pieces[0]).toMatchObject({
       id: 'front',
       name: 'Front',
       d: pathData(front?.outline.map((edge) => edge.curve) ?? [], { closed: true })
@@ -41,8 +41,52 @@ describe('buildScene', () => {
     expect(scene.segments.filter((s) => s.id === 'frontCf')).toHaveLength(1)
   })
 
-  it('bounds every point', () => {
-    expect(buildScene(raglanTee, resolved, null).bounds).toEqual({ min: { x: 0, y: -12 }, max: { x: 997, y: 900 } })
+  it('bounds every point and every cut line', () => {
+    const { bounds } = buildScene(raglanTee, resolved, null)
+    const ringPoints = Object.values(resolved.pieces).flatMap((piece) => piece.cutLine?.ring ?? [])
+    expect(ringPoints.length).toBeGreaterThan(0)
+    expect(bounds?.min.x).toBe(Math.min(0, ...ringPoints.map((p) => p.x)))
+    expect(bounds?.min.y).toBe(Math.min(-12, ...ringPoints.map((p) => p.y)))
+    expect(bounds?.max.x).toBe(Math.max(997, ...ringPoints.map((p) => p.x)))
+    expect(bounds?.max.y).toBe(Math.max(900, ...ringPoints.map((p) => p.y)))
+    expect(bounds?.max.y).toBeGreaterThan(900)
+  })
+
+  describe('piece details', () => {
+    const scene = buildScene(raglanTee, resolved, null)
+    const piece = scene.pieces[0]
+    const front = resolved.pieces['front']
+
+    it('draws the cut line from its ring', () => {
+      expect(piece?.cutD).toBe(polygonPathData(front?.cutLine?.ring ?? []))
+      expect(piece?.cutD?.endsWith('Z')).toBe(true)
+    })
+
+    it('draws one mark per notch', () => {
+      expect(piece?.notchMarks).toEqual(front?.cutLine?.notches.map((notch) => notch.mark))
+      expect(piece?.notchMarks).toHaveLength(1)
+    })
+
+    it('draws the grainline with an arrowhead at its far end', () => {
+      expect(piece?.grainlineD).toBe('M 0 90 L 0 690 M 4.8 678 L 0 690 L -4.8 678')
+    })
+
+    it('draws the fold along its edge', () => {
+      expect(piece?.fold).toEqual([{ x: 0, y: 90 }, { x: 0, y: 690 }])
+    })
+
+    it('has nothing to draw for what failed, but keeps the piece', () => {
+      const broken = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: 'nope' }, grainline: ['hps', 'ghost'], fold: null } })
+      const failed = buildScene(broken, evaluate(broken, 'M'), null).pieces[0]
+      expect(failed).toMatchObject({ id: 'front', cutD: null, notchMarks: [], grainlineD: null, fold: null })
+      expect(failed?.d).toContain('M')
+    })
+
+    it('marks only the selected piece', () => {
+      const selected = buildScene(raglanTee, resolved, { kind: 'piece', id: 'back' })
+      expect(selected.pieces.filter((p) => p.selected).map((p) => p.id)).toEqual(['back'])
+      expect(scene.pieces.some((p) => p.selected)).toBe(false)
+    })
   })
 
   it('leaves out a broken point, its segments and its piece, but keeps the rest', () => {

@@ -89,9 +89,10 @@ export const NotchDefSchema = z.object({
 })
 export type NotchDef = z.infer<typeof NotchDefSchema>
 
+/** Allowance widths are formulas (mm). `perEdge` overrides `default` for the segments it names. */
 export const SeamAllowanceSchema = z.object({
-  default: z.number().nonnegative(),
-  perEdge: z.record(IdSchema, z.number().nonnegative()).optional()
+  default: z.string(),
+  perEdge: z.record(IdSchema, z.string()).optional()
 })
 export type SeamAllowance = z.infer<typeof SeamAllowanceSchema>
 
@@ -103,9 +104,41 @@ export const PieceSchema = z.object({
   notches: z.array(NotchDefSchema),
   grainline: z.tuple([IdSchema, IdSchema]),
   cutCount: z.number().int().positive(),
-  mirror: z.boolean().optional()
+  /** The outline segment this piece is cut on the fold along. */
+  fold: IdSchema.optional()
 })
 export type Piece = z.infer<typeof PieceSchema>
+
+/** Which of a piece's formulas is being visited. A `segmentId` of null is the default allowance. */
+export type PieceFormulaOwner =
+  | { readonly kind: 'notch'; readonly id: Id }
+  | { readonly kind: 'seamAllowance'; readonly segmentId: Id | null }
+
+/**
+ * The one list of every formula a piece owns: evaluate and rename both go through it, so they can't
+ * disagree. Replaces each formula with what `visit` returns, and returns the same piece if none changed.
+ */
+export function visitPieceFormulas(piece: Piece, visit: (owner: PieceFormulaOwner, formula: string) => string): Piece {
+  const notches = piece.notches.map((notch) => {
+    const distance = visit({ kind: 'notch', id: notch.id }, notch.distance)
+    return distance === notch.distance ? notch : { ...notch, distance }
+  })
+  const { default: defaultWidth, perEdge } = piece.seamAllowance
+  const nextDefault = visit({ kind: 'seamAllowance', segmentId: null }, defaultWidth)
+  const edges = Object.entries(perEdge ?? {})
+  const nextEdges = edges.map(([segmentId, formula]): [Id, string] => [segmentId, visit({ kind: 'seamAllowance', segmentId }, formula)])
+
+  const notchesSame = notches.every((notch, i) => notch === piece.notches[i])
+  const allowanceSame = nextDefault === defaultWidth && nextEdges.every(([, formula], i) => formula === edges[i]?.[1])
+  if (notchesSame && allowanceSame) return piece
+  return {
+    ...piece,
+    notches: notchesSame ? piece.notches : notches,
+    seamAllowance: allowanceSame
+      ? piece.seamAllowance
+      : { default: nextDefault, ...(perEdge ? { perEdge: Object.fromEntries(nextEdges) } : {}) }
+  }
+}
 
 export const DisplayUnitsSchema = z.enum(['cm', 'in'])
 export type DisplayUnits = z.infer<typeof DisplayUnitsSchema>

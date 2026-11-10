@@ -19,9 +19,11 @@ describe('parsePattern', () => {
     expect(parsePattern({ ...raglanTee, segments }).ok).toBe(false)
   })
 
-  it('rejects negative seam allowances', () => {
+  it('requires seam allowances to be formula text', () => {
     const [front] = raglanTee.pieces
-    const pieces = [{ ...front, seamAllowance: { default: -1 } }]
-    expect(parsePattern({ ...raglanTee, pieces }).ok).toBe(false)
+    const parseWith = (seamAllowance: unknown) => parsePattern({ ...raglanTee, pieces: [{ ...front, seamAllowance }] }).ok
+    expect(parseWith({ default: 10 })).toBe(false)
+    expect(parseWith({ default: '10', perEdge: { frontHem: 25 } })).toBe(false)
+    expect(parseWith({ default: 'seam', perEdge: { frontHem: 'hem' } })).toBe(true)
   })
 })

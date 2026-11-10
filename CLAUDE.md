@@ -63,12 +63,15 @@ offending item, and the affected values are omitted from the `ResolvedPattern`.
    path). Nodes downstream of a failure get `dependency-failed`.
 5. `outline.ts` (internal, called once at the end of `evaluate`): turns resolved points into
    segment curves with lengths, and pieces into closed, oriented outlines with placed notches. Notch
-   distances are the only other DAG nodes. Closure is checked by point id, not coordinates. All maths
+   distances and seam allowances are the only other DAG nodes, and `visitPieceFormulas` is the one list of
+   them. Closure is checked by point id, not coordinates. `cutLine.ts` builds each piece's seam allowance
+   line from the resolved outline, and `ringUnion.ts` is the only file that imports `clipper2-ts`. Design:
+   `docs/design/m5-pieces.md`. All maths
    is in `geometry.ts`, a kernel with no model imports (arc length, sampling, flattening, area, SVG
    path data). Design and the segment-length-in-formulas recommendation: `docs/design/m2-geometry.md`.
 
 Pattern changes go through `applyEdit(pattern, edit)` in `src/core/edit.ts`. It is pure, and a no-op
-or refused edit returns the same reference. There are six edits (`add`, `remove`, `rename`,
+or refused edit returns the same reference. There are ten edits (`setSegment`, `setPiece`, `retargetEdge`, `removeEdge`, `add`, `remove`, `rename`,
 `setFormula`, `setMeasurement`, `setUnits`), and `checkName` is the one name rule. `rename` rewrites references
 with `renameReferences` in `formula.ts`, which keeps the user's text.
 

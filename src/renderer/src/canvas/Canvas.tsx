@@ -88,8 +88,43 @@ export function Canvas({ scene, onSelect }: CanvasProps) {
           onLostPointerCapture={(e) => handlePointer(e, { type: 'cancel', pointerId: e.pointerId })}
         >
           <g transform={worldTransform(camera, viewport)}>
+            {scene.pieces.map(
+              (piece) =>
+                piece.cutD && (
+                  <path
+                    key={piece.id}
+                    d={piece.cutD}
+                    fill="none"
+                    vectorEffect="non-scaling-stroke"
+                    strokeWidth={piece.selected ? 2 : 1}
+                    className={piece.selected ? 'stroke-amber-600' : 'stroke-neutral-500'}
+                    aria-label={`Cut line ${piece.name}`}
+                  />
+                )
+            )}
             {scene.pieces.map((piece) => (
-              <path key={piece.id} d={piece.d} className="fill-sky-50 stroke-none" aria-label={`Piece ${piece.name}`} />
+              <path key={piece.id} d={piece.d} className={`stroke-none ${piece.selected ? 'fill-amber-50' : 'fill-sky-50'}`} aria-label={`Piece ${piece.name}`} />
+            ))}
+            {scene.pieces.map((piece) => (
+              <g key={piece.id}>
+                {piece.grainlineD && <path d={piece.grainlineD} fill="none" vectorEffect="non-scaling-stroke" strokeWidth={1} className="stroke-emerald-600" aria-label={`Grainline ${piece.name}`} />}
+                {piece.fold && (
+                  <line
+                    x1={piece.fold[0].x}
+                    y1={piece.fold[0].y}
+                    x2={piece.fold[1].x}
+                    y2={piece.fold[1].y}
+                    vectorEffect="non-scaling-stroke"
+                    strokeWidth={3}
+                    strokeDasharray="10 5"
+                    className="stroke-sky-500"
+                    aria-label={`Fold ${piece.name}`}
+                  />
+                )}
+                {piece.notchMarks.map(([from, to], index) => (
+                  <line key={index} x1={from.x} y1={from.y} x2={to.x} y2={to.y} vectorEffect="non-scaling-stroke" strokeWidth={1.5} className="stroke-neutral-800" aria-label={`Notch mark ${piece.name}`} />
+                ))}
+              </g>
             ))}
             {scene.handles.map((handle) => (
               <line

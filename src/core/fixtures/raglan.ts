@@ -101,11 +101,11 @@ export const raglanTee: Pattern = {
         { segmentId: 'frontSide' },
         { segmentId: 'frontRaglan' }
       ],
-      seamAllowance: { default: 10, perEdge: { frontHem: 25, frontCf: 0 } },
+      seamAllowance: { default: '10', perEdge: { frontHem: '25' } },
       notches: [{ id: 'frontRaglanNotch', segmentId: 'frontRaglan', distance: '100' }],
       grainline: ['cfNeck', 'cfHem'],
       cutCount: 1,
-      mirror: true
+      fold: 'frontCf'
     },
     {
       id: 'back',
@@ -117,11 +117,11 @@ export const raglanTee: Pattern = {
         { segmentId: 'frontSide' },
         { segmentId: 'backRaglan' }
       ],
-      seamAllowance: { default: 10, perEdge: { frontHem: 25, backCb: 0 } },
+      seamAllowance: { default: '10', perEdge: { frontHem: '25' } },
       notches: [{ id: 'backRaglanNotch', segmentId: 'backRaglan', distance: '100' }],
       grainline: ['cbNeck', 'cfHem'],
       cutCount: 1,
-      mirror: true
+      fold: 'backCb'
     },
     {
       id: 'sleeve',
@@ -134,7 +134,7 @@ export const raglanTee: Pattern = {
         { segmentId: 'sleeveBackSeam' },
         { segmentId: 'sleeveBackRaglan' }
       ],
-      seamAllowance: { default: 10, perEdge: { sleeveHem: 25 } },
+      seamAllowance: { default: '10', perEdge: { sleeveHem: '25' } },
       notches: [],
       grainline: ['sleeveNeckC', 'sleeveHemFront'],
       cutCount: 2
@@ -148,7 +148,7 @@ export const raglanTee: Pattern = {
         { segmentId: 'bandBottom' },
         { segmentId: 'bandLeft' }
       ],
-      seamAllowance: { default: 10 },
+      seamAllowance: { default: '10' },
       notches: [],
       grainline: ['bandA', 'bandB'],
       cutCount: 1

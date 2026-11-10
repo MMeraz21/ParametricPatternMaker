@@ -265,6 +265,113 @@ export function flatten(curve: Curve, tolerance: number): Vec2[] {
   return points
 }
 
+/** Max distance, in mm, between a chord of an offset chain and the true offset curve. */
+export const OFFSET_TOLERANCE = 0.02
+
+const OFFSET_MAX_DEPTH = 24
+/** A control vector this small, relative to the largest beside it, has no direction worth using. */
+const NEGLIGIBLE_VECTOR = 1e-9
+/** Tangents either side of a split agree above this dot product. Below it the split landed on a cusp. */
+const MIN_TANGENT_AGREEMENT = 0.5
+
+export interface OffsetChain {
+  /** Offset points, first and last exact. Empty only for a curve with no tangent. */
+  readonly points: readonly Vec2[]
+  /** points[i] was computed from source[i]. */
+  readonly source: readonly Vec2[]
+  /** False when a cusp makes the offset undefined. */
+  readonly regular: boolean
+}
+
+/** The first candidate that isn't negligible beside the largest, as a unit vector. */
+function firstDirection(candidates: readonly Vec2[]): Vec2 | undefined {
+  const largest = Math.max(...candidates.map(norm))
+  for (const candidate of candidates) {
+    const length = norm(candidate)
+    if (length > NEGLIGIBLE_VECTOR * largest) return scale(candidate, 1 / length)
+  }
+  return undefined
+}
+
+/** In order of preference, the vectors whose direction is the curve's direction of travel at its start. */
+function startCandidates(curve: Curve): Vec2[] {
+  if (curve.kind === 'line') return [sub(curve.to, curve.from)]
+  return [sub(curve.c1, curve.from), sub(curve.c2, curve.from), sub(curve.to, curve.from)]
+}
+
+function endCandidates(curve: Curve): Vec2[] {
+  if (curve.kind === 'line') return [sub(curve.to, curve.from)]
+  return [sub(curve.to, curve.c2), sub(curve.to, curve.c1), sub(curve.to, curve.from)]
+}
+
+/** A whole curve smaller than DEGENERATE_LENGTH has no tangent. Sub-curves skip this: they can be tiny near a cusp. */
+function tangentOfWholeCurve(candidates: readonly Vec2[]): Vec2 | undefined {
+  return Math.max(...candidates.map(norm)) < DEGENERATE_LENGTH ? undefined : firstDirection(candidates)
+}
+
+/** Exact unit tangent where the curve starts, read from its control points. */
+export function startTangent(curve: Curve): Vec2 | undefined {
+  return tangentOfWholeCurve(startCandidates(curve))
+}
+
+/** Exact unit tangent where the curve ends, in its direction of travel. */
+export function endTangent(curve: Curve): Vec2 | undefined {
+  return tangentOfWholeCurve(endCandidates(curve))
+}
+
+/** Angular width of the cone holding every tangent of the cubic: at least pi when no half-plane holds them. */
+function tangentConeWidth(curve: CubicCurve): number {
+  const hodograph = [sub(curve.c1, curve.from), sub(curve.c2, curve.c1), sub(curve.to, curve.c2)]
+  const largest = Math.max(...hodograph.map(norm))
+  const vectors = hodograph.filter((v) => norm(v) > NEGLIGIBLE_VECTOR * largest)
+  const [base] = vectors
+  if (!base) return 0
+  const angles = vectors.map((v) => Math.atan2(cross(base, v), dot(base, v)))
+  return Math.max(...angles) - Math.min(...angles)
+}
+
+/**
+ * The curve moved `offset` mm along `outward(tangent)`, as a chain within OFFSET_TOLERANCE of the true
+ * offset. Every vertex is P(t) + offset * N(t) on the true curve; a polyline is never offset. A chord is
+ * accepted on a bound measured after offsetting: all tangents lie in the hodograph's cone of width w, so
+ * the offset stays within (|ab| / 2) * tan(w / 2) of its chord ab.
+ */
+export function offsetCurve(curve: Curve, offset: number, outward: (tangent: Vec2) => Vec2): OffsetChain {
+  const first = startTangent(curve)
+  const last = endTangent(curve)
+  if (!first || !last) return { points: [], source: [], regular: true }
+  const place = (point: Vec2, tangent: Vec2): Vec2 => add(point, scale(outward(tangent), offset))
+  if (curve.kind === 'line') {
+    return { points: [place(curve.from, first), place(curve.to, last)], source: [curve.from, curve.to], regular: true }
+  }
+
+  const points = [place(curve.from, first)]
+  const source = [curve.from]
+  let regular = true
+  const recurse = (piece: CubicCurve, startDir: Vec2, endDir: Vec2, depth: number): void => {
+    const end = place(piece.to, endDir)
+    const width = tangentConeWidth(piece)
+    const within =
+      width < Math.PI && (distance(place(piece.from, startDir), end) / 2) * Math.tan(width / 2) <= OFFSET_TOLERANCE
+    // A cone of pi or more never passes, however small the piece, so a cusp splits until the depth limit.
+    if (within || depth >= OFFSET_MAX_DEPTH) {
+      if (!within) regular = false
+      points.push(end)
+      source.push(piece.to)
+      return
+    }
+    const [left, right] = splitCubic(piece, 0.5)
+    const arriving = firstDirection(endCandidates(left))
+    const leaving = firstDirection(startCandidates(right))
+    if (!arriving || !leaving || dot(arriving, leaving) < MIN_TANGENT_AGREEMENT) regular = false
+    const middle = leaving ?? arriving ?? endDir
+    recurse(left, startDir, middle, depth + 1)
+    recurse(right, middle, endDir, depth + 1)
+  }
+  recurse(curve, first, last, 0)
+  return { points, source, regular }
+}
+
 // 3-point Gauss-Legendre on [0, 1]: exact for polynomials up to degree 5.
 const GL3: readonly (readonly [node: number, weight: number])[] = [
   [0.5, 4 / 9],
@@ -290,6 +397,12 @@ export function signedArea(chain: readonly Curve[]): number {
 }
 
 const fmt = (n: number): string => String(Math.round(n * 1e6) / 1e6)
+
+/** SVG path data for a closed polygon with no repeated closing vertex. */
+export function polygonPathData(ring: readonly Vec2[]): string {
+  if (ring.length === 0) return ''
+  return `${ring.map(({ x, y }, i) => `${i === 0 ? 'M' : 'L'} ${fmt(x)} ${fmt(y)}`).join(' ')} Z`
+}
 
 /**
  * SVG path data for a chain of curves, e.g. "M 0 0 C 1 2 3 4 5 6 L 7 8 Z". Shared by the canvas, SVG

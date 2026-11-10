@@ -7,7 +7,7 @@ interface IssuesPanelProps {
   onSelect: (selection: Selection) => void
 }
 
-/** Every evaluation issue. Point issues are clickable: it's how you reach a point the canvas can't draw. */
+/** Every evaluation issue. Clicking one opens the item it's about, which is how you reach a point the canvas can't draw. */
 export function IssuesPanel({ issues, onSelect }: IssuesPanelProps) {
   return (
     <section aria-labelledby="issues-heading" className="border-t border-neutral-200 p-4">

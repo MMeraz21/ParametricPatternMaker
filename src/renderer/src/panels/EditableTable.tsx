@@ -8,8 +8,9 @@ interface EditableTableProps {
   onSelect: (key: ItemKey) => void
 }
 
-/** Renders any TableModel. Knows nothing about measurements, variables or points. */
+/** Renders any TableModel. Knows nothing about what its rows are. */
 export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
+  const { add } = table
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-auto">
@@ -31,11 +32,9 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row, index) => (
+            {table.rows.map((row) => (
               <tr
-                // Points have stable ids. Measurements and variables are keyed by name, which a rename
-                // changes; keying them by position keeps the row (and the cell Tab is moving to) mounted.
-                key={row.key.kind === 'point' ? row.key.id : index}
+                key={row.id}
                 aria-selected={row.selected}
                 onFocus={() => onSelect(row.key)}
                 onClick={() => onSelect(row.key)}
@@ -59,6 +58,8 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
                   <button
                     type="button"
                     aria-label={`Delete ${row.name}`}
+                    // Selecting on focus can reflow the dock mid-press, moving this button out from under the click.
+                    onFocus={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation()
                       onEdit(row.remove)
@@ -73,14 +74,20 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
           </tbody>
         </table>
       </div>
-      <div className="border-t border-neutral-200 p-1">
-        <button type="button" onClick={() => onEdit(table.add.edit)} className="rounded px-2 py-0.5 text-sm text-sky-700 hover:bg-sky-50">
-          + {table.add.label}
-        </button>
-      </div>
+      {add && (
+        <div className="border-t border-neutral-200 p-1">
+          <button type="button" onClick={() => onEdit(add.edit)} className="rounded px-2 py-0.5 text-sm text-sky-700 hover:bg-sky-50">
+            + {add.label}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
+
+const MIN_INPUT_CHARS = 4
+/** Room for the input's own padding and border. */
+const INPUT_PADDING_CHARS = 2
 
 interface EditableCellProps {
   cell: TextCell
@@ -116,6 +123,8 @@ function EditableCell({ cell, numeric, onEdit }: EditableCellProps) {
         aria-invalid={problems.length > 0}
         title={problems.join('\n') || undefined}
         spellCheck={false}
+        // Never narrower than its text: a long name is readable, and a tight table scrolls sideways instead.
+        style={{ minWidth: `${Math.max(cell.text.length, MIN_INPUT_CHARS) + INPUT_PADDING_CHARS}ch` }}
         value={draft ?? cell.text}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}

@@ -5,17 +5,21 @@ import type { TableModel } from './tables'
 const TABS: readonly { kind: ItemKind; label: string }[] = [
   { kind: 'measurement', label: 'Measurements' },
   { kind: 'variable', label: 'Variables' },
-  { kind: 'point', label: 'Points' }
+  { kind: 'point', label: 'Points' },
+  { kind: 'segment', label: 'Segments' },
+  { kind: 'piece', label: 'Pieces' }
 ]
 
 interface PanelDockProps {
-  table: TableModel
+  /** The first is the tab's own table; the Pieces tab adds more below it. */
+  tables: readonly TableModel[]
   onShowPanel: (kind: ItemKind) => void
   onEdit: (edit: PatternEdit) => void
   onSelect: (key: ItemKey) => void
 }
 
-export function PanelDock({ table, onShowPanel, onEdit, onSelect }: PanelDockProps) {
+export function PanelDock({ tables, onShowPanel, onEdit, onSelect }: PanelDockProps) {
+  const kind = tables[0]?.kind
   return (
     <section aria-label="Editor panels" className="flex h-full flex-col bg-white">
       <div role="tablist" aria-label="Editor panels" className="flex gap-1 border-b border-neutral-200 px-2 pt-1">
@@ -24,19 +28,22 @@ export function PanelDock({ table, onShowPanel, onEdit, onSelect }: PanelDockPro
             key={tab.kind}
             type="button"
             role="tab"
-            aria-selected={tab.kind === table.kind}
+            aria-selected={tab.kind === kind}
             onClick={() => onShowPanel(tab.kind)}
             className={`rounded-t px-3 py-1 text-sm ${
-              tab.kind === table.kind ? 'border border-b-white border-neutral-200 bg-white font-medium -mb-px' : 'text-neutral-500 hover:text-neutral-800'
+              tab.kind === kind ? 'border border-b-white border-neutral-200 bg-white font-medium -mb-px' : 'text-neutral-500 hover:text-neutral-800'
             }`}
           >
             {tab.label}
           </button>
         ))}
       </div>
-      <div role="tabpanel" aria-label={table.title} className="min-h-0 flex-1">
-        {/* Keyed by tab so a draft in one table can't reappear in a row of another. */}
-        <EditableTable key={table.kind} table={table} onEdit={onEdit} onSelect={onSelect} />
+      {/* Side by side: the dock is short, and a selected piece's tables must show without scrolling. */}
+      <div role="tabpanel" aria-label={tables[0]?.title} className={`min-h-0 flex-1 ${tables.length > 1 ? 'grid grid-cols-[minmax(0,5fr)_minmax(0,4fr)_minmax(0,2fr)] grid-rows-[minmax(0,1fr)] divide-x divide-neutral-200' : ''}`}>
+        {/* Keyed by id so a draft in one table can't reappear in a row of another. */}
+        {tables.map((table) => (
+          <EditableTable key={table.id} table={table} onEdit={onEdit} onSelect={onSelect} />
+        ))}
       </div>
     </section>
   )

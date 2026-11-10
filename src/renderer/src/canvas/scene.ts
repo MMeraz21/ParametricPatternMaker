@@ -1,4 +1,19 @@
-import { curvePoints, pathData, segmentPointIds, type Id, type Pattern, type ResolvedPattern, type Segment, type Vec2 } from '@core'
+import {
+  add,
+  curvePoints,
+  distance,
+  pathData,
+  polygonPathData,
+  scale,
+  segmentPointIds,
+  sub,
+  type Id,
+  type Pattern,
+  type ResolvedGrainline,
+  type ResolvedPattern,
+  type Segment,
+  type Vec2
+} from '@core'
 import { pointRoles, type PointRole } from '../editor/inspect'
 import type { Selection } from '../editor/state'
 import { boundsOf, type Bounds } from './camera'
@@ -16,7 +31,7 @@ export interface Scene {
   readonly handles: readonly SceneHandle[]
   /** One per resolved point; controls first so anchors paint on top. */
   readonly markers: readonly SceneMarker[]
-  /** Fit target: every point and curve control point. Null when nothing resolved. */
+  /** Fit target: every point, curve control point and cut line. Null when nothing resolved. */
   readonly bounds: Bounds | null
 }
 
@@ -24,6 +39,12 @@ export interface ScenePiece {
   readonly id: Id
   readonly name: string
   readonly d: string
+  /** Null when the piece has no cut line; an issue says why. */
+  readonly cutD: string | null
+  readonly notchMarks: readonly (readonly [Vec2, Vec2])[]
+  readonly grainlineD: string | null
+  readonly fold: readonly [Vec2, Vec2] | null
+  readonly selected: boolean
 }
 
 export interface SceneSegment {
@@ -50,6 +71,23 @@ export interface SceneMarker {
   readonly selected: boolean
 }
 
+/** How far back the two barbs of a grainline arrowhead reach, in mm. */
+const GRAINLINE_HEAD_LENGTH = 12
+/** Each barb's offset from the shaft, as a fraction of the head length. */
+const GRAINLINE_HEAD_WIDTH = 0.4
+
+/** The shaft, then a barb, the tip and the other barb. */
+function grainlinePath({ from, to }: ResolvedGrainline): string {
+  const along = scale(sub(from, to), 1 / distance(from, to))
+  const across = { x: -along.y, y: along.x }
+  const back = add(to, scale(along, GRAINLINE_HEAD_LENGTH))
+  const barb = (side: 1 | -1): Vec2 => add(back, scale(across, side * GRAINLINE_HEAD_LENGTH * GRAINLINE_HEAD_WIDTH))
+  return `${pathData([{ kind: 'line', from, to }])} ${pathData([
+    { kind: 'line', from: barb(1), to },
+    { kind: 'line', from: to, to: barb(-1) }
+  ])}`
+}
+
 export function buildScene(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): Scene {
   const roles = pointRoles(pattern)
   const selectedId = selection?.kind === 'point' ? selection.id : null
@@ -63,7 +101,12 @@ export function buildScene(pattern: Pattern, resolved: ResolvedPattern, selectio
     d: pathData(
       piece.outline.map((edge) => edge.curve),
       { closed: true }
-    )
+    ),
+    cutD: piece.cutLine ? polygonPathData(piece.cutLine.ring) : null,
+    notchMarks: piece.cutLine?.notches.map((notch) => notch.mark) ?? [],
+    grainlineD: piece.grainline ? grainlinePath(piece.grainline) : null,
+    fold: piece.fold ? ([piece.fold.from, piece.fold.to] as const) : null,
+    selected: selection?.kind === 'piece' && selection.id === piece.id
   }))
 
   // Author order from the pattern, not record key order.
@@ -95,6 +138,10 @@ export function buildScene(pattern: Pattern, resolved: ResolvedPattern, selectio
   }
   markers.sort((a, b) => Number(a.role === 'anchor') - Number(b.role === 'anchor'))
 
-  const bounds = boundsOf([...markers.map((marker) => marker.at), ...Object.values(resolved.segments).flatMap((s) => curvePoints(s.curve))])
+  const bounds = boundsOf([
+    ...markers.map((marker) => marker.at),
+    ...Object.values(resolved.segments).flatMap((s) => curvePoints(s.curve)),
+    ...resolvedPieces.flatMap((piece) => piece.cutLine?.ring ?? [])
+  ])
   return { pieces, segments, handles, markers, bounds }
 }

@@ -74,8 +74,10 @@ export function selectionForIssue(issue: EvaluationIssue): Selection | null {
       return { kind: 'point', id: item.id }
     case 'segment':
     case 'piece':
+      return { kind: item.kind, id: item.id }
     case 'notch':
-      return null
+    case 'seamAllowance':
+      return { kind: 'piece', id: item.pieceId }
     default: {
       const _exhaustive: never = item
       return _exhaustive
