@@ -62,6 +62,50 @@ names, or add a `Segment.name` field, which is a schema change. Details are in
 `ResolvedPattern` drops both coordinates when either one fails, so the inspector shows "—" for both.
 Fixing this is a small `evaluate` change.
 
+### How long may a sharp corner's allowance tip be? (from M5)
+
+Where two edges meet at a sharp angle, the allowance comes to a long point. **Current default:** the
+point is trimmed once it reaches 4× the wider of the two allowances. It's one constant to change.
+
+### Should a hem corner be shaped so it folds back flat? (from M5)
+
+When a hem is folded up, a plain corner can leave the side seam allowance too narrow or too wide. Pattern
+makers often shape that corner to mirror the seam. **Current default:** plain corners, where each edge's
+offset runs straight to where it meets its neighbour. A per-corner choice could come later.
+
+### How long is a notch mark on the printed cut line? (from M5)
+
+**Current default:** 6 mm, cut inward from the cut line. T-notches or a depth tied to the allowance are
+the alternatives.
+
+### What does `cutCount: 2` mean? (from M5)
+
+It could be a mirrored pair, like sleeves, or two identical pieces. **Current default:** the app doesn't
+say. It carries the number and export prints "Cut 2".
+
+### Is cut-on-fold a property of an edge? (from M5)
+
+The plan has `mirror: true` on a piece, which doesn't say where the fold is. **Current default:** replace
+it with `fold: <edge>`, which names the edge, forces its allowance to 0 and checks the edge is straight
+with the whole piece on one side.
+
+### Can a zero allowance be used on an edge that isn't a fold? (from M5)
+
+For example, a raw edge finished with binding. **Current default:** allowed, and its corners behave
+exactly like a fold's.
+
+### Should an edge hidden by its neighbours block the cut line? (from M5)
+
+A very curved neckline or a narrow slot can have an allowance so wide that the neighbouring allowance
+covers the edge completely (at or above the radius of a tight inward curve, or half a slot's width).
+**Current default:** no cut line, and an issue names the edge to change. The alternative is to draw the
+filled-in outline and show a warning.
+
+### How do you define a piece's outline? (from M5)
+
+**Current default:** a table of edges where you type segment names in order. Clicking segments on the
+canvas is the likely improvement.
+
 ## Decided
 
 - **An outline with a gap omits the piece** (M2). Its segments still draw and the issue names both
