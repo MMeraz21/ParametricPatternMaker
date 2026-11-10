@@ -1,7 +1,7 @@
 import { ClipType, Clipper64, FillRule, PathType, type Path64, type Paths64 } from 'clipper2-ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { vec, type Vec2 } from './geometry'
-import { areaOutside, ringIsSimple, unionRing, type UnionVertex } from './ringUnion'
+import { areaOutside, onSameGridPoint, ringIsSimple, unionRing, type UnionVertex } from './ringUnion'
 
 const ring = (...coordinates: [number, number][]): Vec2[] => coordinates.map(([x, y]) => vec(x, y))
 
@@ -160,6 +160,14 @@ describe('unionRing', () => {
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, 1e300])('fails rather than throws for a coordinate of %d', (bad) => {
     expect(unionRing(ring([0, 0], [bad, 0], [0, 100]))).toMatchObject({ ok: false })
+  })
+})
+
+describe('onSameGridPoint', () => {
+  it('is true within one grid point and false beyond it', () => {
+    expect(onSameGridPoint(vec(1, 1), vec(1.0004, 0.9996))).toBe(true)
+    expect(onSameGridPoint(vec(1, 1), vec(1.002, 1))).toBe(false)
+    expect(onSameGridPoint(vec(1, 1), vec(1, 1.002))).toBe(false)
   })
 })
 

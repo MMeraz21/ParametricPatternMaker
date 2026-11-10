@@ -74,6 +74,11 @@ function mergeRepeats(grid: Path64): MergedRing {
   return { path, firstInput, lastInput }
 }
 
+/** True when the two points land on one grid point, so a segment between them has no length. */
+export function onSameGridPoint(a: Vec2, b: Vec2): boolean {
+  return Math.round(a.x * GRID) === Math.round(b.x * GRID) && Math.round(a.y * GRID) === Math.round(b.y * GRID)
+}
+
 /** Twice the signed area of a grid path, exactly: 100 m is 1e8 grid units, whose products overflow a double. */
 function doubledArea(path: Path64): bigint {
   let sum = 0n

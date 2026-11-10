@@ -398,6 +398,12 @@ export function signedArea(chain: readonly Curve[]): number {
 
 const fmt = (n: number): string => String(Math.round(n * 1e6) / 1e6)
 
+/** SVG path data for a closed polygon with no repeated closing vertex. */
+export function polygonPathData(ring: readonly Vec2[]): string {
+  if (ring.length === 0) return ''
+  return `${ring.map(({ x, y }, i) => `${i === 0 ? 'M' : 'L'} ${fmt(x)} ${fmt(y)}`).join(' ')} Z`
+}
+
 /**
  * SVG path data for a chain of curves, e.g. "M 0 0 C 1 2 3 4 5 6 L 7 8 Z". Shared by the canvas, SVG
  * export and PDF export so they render identical true curves. Assumes each curve starts where the

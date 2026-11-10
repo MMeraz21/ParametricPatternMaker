@@ -18,6 +18,7 @@ export {
   norm,
   pathData,
   pointAt,
+  polygonPathData,
   reverseCurve,
   sampleAtLength,
   sampleAtParameter,

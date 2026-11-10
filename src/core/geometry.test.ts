@@ -14,6 +14,7 @@ import {
   offsetCurve,
   pathData,
   pointAt,
+  polygonPathData,
   reverseCurve,
   sampleAtLength,
   sampleAtParameter,
@@ -200,6 +201,16 @@ describe('pathData', () => {
   it('rounds to micrometres and is empty for an empty chain', () => {
     expect(pathData([line(0, 0, 1 / 3, 0)])).toBe('M 0 0 L 0.333333 0')
     expect(pathData([])).toBe('')
+  })
+})
+
+describe('polygonPathData', () => {
+  it('emits one move, then lines, and closes', () => {
+    expect(polygonPathData([vec(0, 0), vec(10, 0), vec(1 / 3, 5)])).toBe('M 0 0 L 10 0 L 0.333333 5 Z')
+  })
+
+  it('is empty for an empty ring', () => {
+    expect(polygonPathData([])).toBe('')
   })
 })
 

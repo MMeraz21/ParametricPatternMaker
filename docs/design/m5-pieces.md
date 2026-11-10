@@ -242,7 +242,7 @@ export type CutLineResult =
   | { readonly ok: false; readonly failure: CutLineFailure }
 
 /** Total and pure: every input yields a result. Never throws. */
-export function buildCutLine(edges: readonly EdgeAllowance[], orientation: Orientation, foldLine?: FoldLine): CutLineResult {
+export function buildCutLine(edges: readonly EdgeAllowance[], orientation: Orientation, fold?: Id): CutLineResult {
   // TODO, in order:
   //  1 range guard on every control point and allowance -> out-of-range
   //  2 drop edges under MIN_EDGE_LENGTH
@@ -460,7 +460,8 @@ neckband winds the other way. All four pieces resolve with zero issues in all fi
 
 Unit tests in `geometry.test.ts` and a new `cutLine.test.ts`: one per corner-rule row and per failure-table
 row, in both windings, with the exact numbers above. The library throw is exercised by mocking
-`clipper2-ts` in the test, so no test seam appears in a signature. A seeded fuzz of 4,000 shapes runs two
+`clipper2-ts` in `ringUnion.test.ts`, and `cutLine.test.ts` mocks `./ringUnion`, so no test seam appears in a
+signature and no second file imports the library. A seeded fuzz of 4,000 shapes runs two
 oracles: the union of bands is inside the ring, and each edge span's interior sits at its allowance. These
 catch undershoot and overshoot.
 
