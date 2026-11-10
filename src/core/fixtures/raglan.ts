@@ -13,7 +13,6 @@ export const raglanTee: Pattern = {
   version: CURRENT_SCHEMA_VERSION,
   units: 'cm',
   sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-  activeSize: 'M',
   measurements: [
     { name: 'chest', values: { S: 920, M: 1000, L: 1080, XL: 1160, XXL: 1260 } },
     { name: 'neck', values: { S: 370, M: 390, L: 410, XL: 430, XXL: 450 } },
@@ -138,7 +137,8 @@ export const raglanTee: Pattern = {
       seamAllowance: { default: '10', perEdge: { sleeveHem: '25' } },
       notches: [],
       grainline: ['sleeveNeckC', 'sleeveHemFront'],
-      cutCount: 2
+      cutCount: 2,
+      stackPoint: 'sleeveNeckC'
     },
     {
       id: 'neckband',
@@ -152,7 +152,8 @@ export const raglanTee: Pattern = {
       seamAllowance: { default: '10' },
       notches: [],
       grainline: ['bandA', 'bandB'],
-      cutCount: 1
+      cutCount: 1,
+      stackPoint: 'bandA'
     }
   ]
 }

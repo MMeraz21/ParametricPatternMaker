@@ -51,6 +51,12 @@ export function Canvas({ scene, onSelect }: CanvasProps) {
     }
   }, [])
 
+  // Turning the nest on may need more room; nothing else about the nest moves the camera.
+  const nestOn = scene.legend.length > 0
+  useEffect(() => {
+    if (nestOn) dispatchCamera({ type: 'reveal', shown: scene.shownBounds, all: scene.bounds })
+  }, [nestOn])
+
   const projected = useMemo(
     () => (camera && viewport ? scene.markers.map((marker) => ({ marker, at: worldToScreen(camera, viewport, marker.at) })) : []),
     [scene.markers, camera, viewport]
@@ -105,6 +111,17 @@ export function Canvas({ scene, onSelect }: CanvasProps) {
             {scene.pieces.map((piece) => (
               <path key={piece.id} d={piece.d} className={`stroke-none ${piece.selected ? 'fill-amber-50' : 'fill-sky-50'}`} aria-label={`Piece ${piece.name}`} />
             ))}
+            {scene.ghosts.map((ghost) => {
+              const transform = `translate(${ghost.offset.x} ${ghost.offset.y})`
+              return (
+                <g key={ghost.key} pointerEvents="none">
+                  <path d={ghost.d} transform={transform} fill="none" stroke={ghost.tint} vectorEffect="non-scaling-stroke" strokeWidth={1} aria-label={`Graded ${ghost.size} ${ghost.pieceName}`} />
+                  {ghost.cutD && (
+                    <path d={ghost.cutD} transform={transform} fill="none" stroke={ghost.tint} vectorEffect="non-scaling-stroke" strokeWidth={1} strokeDasharray="4 3" aria-label={`Graded cut line ${ghost.size} ${ghost.pieceName}`} />
+                  )}
+                </g>
+              )
+            })}
             {scene.pieces.map((piece) => (
               <g key={piece.id}>
                 {piece.grainlineD && <path d={piece.grainlineD} fill="none" vectorEffect="non-scaling-stroke" strokeWidth={1} className="stroke-emerald-600" aria-label={`Grainline ${piece.name}`} />}
@@ -189,6 +206,19 @@ export function Canvas({ scene, onSelect }: CanvasProps) {
             ))}
           </g>
         </svg>
+      )}
+      {nestOn && (
+        <ul aria-label="Size legend" className="absolute top-3 right-3 max-w-56 space-y-0.5 rounded-md border border-neutral-200 bg-white/90 p-2 text-xs shadow-sm">
+          {scene.legend.map((entry) => (
+            <li key={entry.size} className="flex items-start gap-1.5">
+              <span aria-hidden="true" className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry.shown ? '#262626' : entry.tint }} />
+              <span>
+                <span className={entry.shown ? 'font-semibold' : ''}>{entry.size}</span>
+                {entry.gaps.length > 0 && <span className="text-amber-700"> {entry.gaps.join(', ')}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
       <div className="absolute top-3 left-3 flex items-center gap-1 rounded-md border border-neutral-200 bg-white/90 p-1 text-sm shadow-sm">
         <button

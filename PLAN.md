@@ -28,7 +28,7 @@ Variable     { name: string; formula: string }                     // e.g. ease 
 Point        { id: string; name: string; x: string; y: string }   // x/y are formulas, can reference other points (A.x) and variables
 Segment      = Line { from, to } | Bezier { from, c1, c2, to }    // control points are also Points
 Piece        { id; name; outline: SegmentRef[]; seamAllowance: { default: string; perEdge?: Record<segId, string> }; notches: NotchDef[]; grainline: [pointId, pointId]; cutCount: number; fold?: segId }   // allowances are formulas; fold names the cut-on-fold edge, whose allowance is 0
-Pattern      { version; units; sizes: SizeName[]; activeSize; measurements; variables; points; segments; pieces }
+Pattern      { version; units; sizes: SizeName[]; measurements; variables; points; segments; pieces }
 ```
 - Build a dependency graph (DAG) from all formula references. Topologically sort to evaluate. Detect and report cycles and undefined references with clear errors pointing to the offending item.
 - Evaluation: `evaluate(pattern, size) -> ResolvedPattern` (concrete coordinates). Pure function.

@@ -84,6 +84,8 @@ export interface ResolvedPiece {
   /** Absent only when an issue explains why. */
   readonly grainline?: ResolvedGrainline
   readonly fold?: ResolvedFold
+  /** Absent when the piece names none, or when an issue explains why. */
+  readonly stackPoint?: Vec2
 }
 
 export interface ResolvedGrainline {
@@ -366,6 +368,7 @@ function resolvePiece(
   }
 
   const grainline = resolveGrainline(piece, item, input, issues)
+  const stackPoint = resolveStackPoint(piece, item, input, issues)
   const fold = resolveFold(piece, item, outline, orientation, issues)
   reportAllowanceEdges(piece, outline, fold, issues)
   const cutLine = resolveCutLine(piece, item, outline, orientation, notches, fold, input.allowances, issues)
@@ -380,27 +383,32 @@ function resolvePiece(
     cutCount: piece.cutCount,
     ...(cutLine ? { cutLine } : {}),
     ...(grainline ? { grainline } : {}),
-    ...(fold ? { fold } : {})
+    ...(fold ? { fold } : {}),
+    ...(stackPoint ? { stackPoint } : {})
   }
 }
 
-function resolveGrainline(
-  piece: Piece,
-  item: ItemRef,
-  { points, pointNames }: GeometryInput,
-  issues: EvaluationIssue[]
-): ResolvedGrainline | undefined {
+/** A point a piece refers to by id. A point that isn't there, or didn't evaluate, is reported on the piece. */
+function resolvePiecePoint(id: Id, usedAs: string, piece: Piece, item: ItemRef, { points, pointNames }: GeometryInput, issues: EvaluationIssue[]): ResolvedPoint | undefined {
   // hasOwn: an id such as 'constructor' must not find what every object inherits.
-  const resolve = (id: Id): ResolvedPoint | undefined => {
-    if (Object.hasOwn(points, id) && points[id]) return points[id]
-    const name = pointNames.get(id)
-    if (name === undefined) {
-      issues.push({ kind: 'missing-point', item, pointId: id, message: `Piece '${piece.name}' has a grainline on missing point '${id}'` })
-    } else {
-      issues.push({ kind: 'dependency-failed', item, dependency: name, message: `Piece '${piece.name}' has a grainline on '${name}', which could not be evaluated` })
-    }
-    return undefined
+  if (Object.hasOwn(points, id) && points[id]) return points[id]
+  const name = pointNames.get(id)
+  if (name === undefined) {
+    issues.push({ kind: 'missing-point', item, pointId: id, message: `Piece '${piece.name}' has a ${usedAs} on missing point '${id}'` })
+  } else {
+    issues.push({ kind: 'dependency-failed', item, dependency: name, message: `Piece '${piece.name}' has a ${usedAs} on '${name}', which could not be evaluated` })
   }
+  return undefined
+}
+
+function resolveStackPoint(piece: Piece, item: ItemRef, input: GeometryInput, issues: EvaluationIssue[]): Vec2 | undefined {
+  if (piece.stackPoint === undefined) return undefined
+  const point = resolvePiecePoint(piece.stackPoint, 'stack point', piece, item, input, issues)
+  return point && vec(point.x, point.y)
+}
+
+function resolveGrainline(piece: Piece, item: ItemRef, input: GeometryInput, issues: EvaluationIssue[]): ResolvedGrainline | undefined {
+  const resolve = (id: Id): ResolvedPoint | undefined => resolvePiecePoint(id, 'grainline', piece, item, input, issues)
   const [from, to] = [resolve(piece.grainline[0]), resolve(piece.grainline[1])]
   if (!from || !to) return undefined
   if (distance(from, to) < DEGENERATE_LENGTH) {

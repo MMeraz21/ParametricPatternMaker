@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { applyEdit, evaluate, pathData, polygonPathData } from '@core'
-import { raglanTee } from '@core/fixtures/raglan'
+import { applyEdit, evaluateGraded, pathData, polygonPathData, viewAt, type Pattern } from '@core'
+import { raglanFailingInXXL, raglanTee } from '@core/fixtures/raglan'
 import { buildScene } from './scene'
 
-const resolved = evaluate(raglanTee, 'M')
+const viewOf = (pattern: Pattern, size = 'M') => viewAt(evaluateGraded(pattern), size)
+const view = viewOf(raglanTee)
 
 describe('buildScene', () => {
   it('draws each raglan piece closed, with every segment in a piece', () => {
-    const scene = buildScene(raglanTee, resolved, null)
-    const front = resolved.pieces['front']
+    const scene = buildScene(raglanTee, view, null, false)
+    const front = view.resolved.pieces['front']
     expect(scene.pieces.map((p) => p.id)).toEqual(['front', 'back', 'sleeve', 'neckband'])
     expect(scene.pieces[0]).toMatchObject({
       id: 'front',
@@ -21,7 +22,7 @@ describe('buildScene', () => {
   })
 
   it('adds two handles per bezier and puts control markers before anchors', () => {
-    const scene = buildScene(raglanTee, resolved, null)
+    const scene = buildScene(raglanTee, view, null, false)
     expect(scene.handles).toHaveLength(14)
     expect(scene.handles.slice(0, 4).map((h) => h.key)).toEqual(['frontNeck:1', 'frontNeck:2', 'frontRaglan:1', 'frontRaglan:2'])
     expect(scene.handles[0]).toMatchObject({ anchor: { x: 70, y: 0 }, control: { x: 63, y: 54 } })
@@ -29,7 +30,7 @@ describe('buildScene', () => {
   })
 
   it('marks the selected point and highlights the segments that use it', () => {
-    const scene = buildScene(raglanTee, resolved, { kind: 'point', id: 'raglanC1' })
+    const scene = buildScene(raglanTee, view, { kind: 'point', id: 'raglanC1' }, false)
     expect(scene.markers.filter((m) => m.selected).map((m) => m.id)).toEqual(['raglanC1'])
     expect(scene.segments.filter((s) => s.highlighted).map((s) => s.id)).toEqual(['frontRaglan'])
     expect(scene.handles.filter((h) => h.highlighted)).toHaveLength(2)
@@ -37,13 +38,13 @@ describe('buildScene', () => {
 
   it('draws a duplicated segment id once', () => {
     const pattern = { ...raglanTee, segments: [...raglanTee.segments, { id: 'frontCf', kind: 'line' as const, from: 'hps', to: 'cfHem' }] }
-    const scene = buildScene(pattern, evaluate(pattern, 'M'), null)
+    const scene = buildScene(pattern, viewOf(pattern), null, false)
     expect(scene.segments.filter((s) => s.id === 'frontCf')).toHaveLength(1)
   })
 
   it('bounds every point and every cut line', () => {
-    const { bounds } = buildScene(raglanTee, resolved, null)
-    const ringPoints = Object.values(resolved.pieces).flatMap((piece) => piece.cutLine?.ring ?? [])
+    const { bounds } = buildScene(raglanTee, view, null, false)
+    const ringPoints = Object.values(view.resolved.pieces).flatMap((piece) => piece.cutLine?.ring ?? [])
     expect(ringPoints.length).toBeGreaterThan(0)
     expect(bounds?.min.x).toBe(Math.min(0, ...ringPoints.map((p) => p.x)))
     expect(bounds?.min.y).toBe(Math.min(-12, ...ringPoints.map((p) => p.y)))
@@ -53,9 +54,9 @@ describe('buildScene', () => {
   })
 
   describe('piece details', () => {
-    const scene = buildScene(raglanTee, resolved, null)
+    const scene = buildScene(raglanTee, view, null, false)
     const piece = scene.pieces[0]
-    const front = resolved.pieces['front']
+    const front = view.resolved.pieces['front']
 
     it('draws the cut line from its ring', () => {
       expect(piece?.cutD).toBe(polygonPathData(front?.cutLine?.ring ?? []))
@@ -77,13 +78,13 @@ describe('buildScene', () => {
 
     it('has nothing to draw for what failed, but keeps the piece', () => {
       const broken = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: 'nope' }, grainline: ['hps', 'ghost'], fold: null } })
-      const failed = buildScene(broken, evaluate(broken, 'M'), null).pieces[0]
+      const failed = buildScene(broken, viewOf(broken), null, false).pieces[0]
       expect(failed).toMatchObject({ id: 'front', cutD: null, notchMarks: [], grainlineD: null, fold: null })
       expect(failed?.d).toContain('M')
     })
 
     it('marks only the selected piece', () => {
-      const selected = buildScene(raglanTee, resolved, { kind: 'piece', id: 'back' })
+      const selected = buildScene(raglanTee, view, { kind: 'piece', id: 'back' }, false)
       expect(selected.pieces.filter((p) => p.selected).map((p) => p.id)).toEqual(['back'])
       expect(scene.pieces.some((p) => p.selected)).toBe(false)
     })
@@ -91,7 +92,7 @@ describe('buildScene', () => {
 
   it('leaves out a broken point, its segments and its piece, but keeps the rest', () => {
     const pattern = applyEdit(raglanTee, { kind: 'setFormula', owner: { kind: 'point', id: 'cfHem', axis: 'y' }, formula: 'nope' })
-    const scene = buildScene(pattern, evaluate(pattern, 'M'), { kind: 'point', id: 'cfHem' })
+    const scene = buildScene(pattern, viewOf(pattern), { kind: 'point', id: 'cfHem' }, false)
     expect(scene.pieces.map((p) => p.id)).toEqual(['sleeve', 'neckband'])
     expect(scene.markers.map((m) => m.id)).not.toContain('cfHem')
     expect(scene.segments.slice(0, 6).map((s) => [s.id, s.inPiece])).toEqual([
@@ -102,5 +103,52 @@ describe('buildScene', () => {
       ['backRaglan', false],
       ['sleeveNeck', true]
     ])
+  })
+})
+
+describe('buildScene with the nest', () => {
+  const off = buildScene(raglanTee, view, null, false)
+  const on = buildScene(raglanTee, view, null, true)
+
+  it('adds nothing when the nest is off', () => {
+    expect(off.ghosts).toEqual([])
+    expect(off.legend).toEqual([])
+    expect(off.bounds).toEqual(off.shownBounds)
+  })
+
+  it('leaves everything else exactly as it was when the nest is on', () => {
+    expect(on.pieces).toEqual(off.pieces)
+    expect(on.segments).toEqual(off.segments)
+    expect(on.handles).toEqual(off.handles)
+    expect(on.markers).toEqual(off.markers)
+    expect(on.shownBounds).toEqual(off.shownBounds)
+  })
+
+  it('draws every other size of every piece, placed by its stack offset', () => {
+    expect(on.ghosts).toHaveLength(16)
+    expect(on.ghosts.find((ghost) => ghost.key === 'S:sleeve')).toMatchObject({ size: 'S', pieceName: 'Sleeve', offset: { x: 40, y: 0 } })
+    expect(on.ghosts.every((ghost) => ghost.d.endsWith('Z') && ghost.cutD !== null)).toBe(true)
+  })
+
+  it('grows the bounds to everything drawn', () => {
+    expect(on.bounds?.max.x).toBeGreaterThan(off.bounds?.max.x ?? Infinity)
+  })
+
+  it('gives each size a legend entry and a tint of its own', () => {
+    expect(on.legend.map((entry) => [entry.size, entry.shown, entry.gaps])).toEqual([
+      ['S', false, []],
+      ['M', true, []],
+      ['L', false, []],
+      ['XL', false, []],
+      ['XXL', false, []]
+    ])
+    expect(new Set(on.legend.map((entry) => entry.tint)).size).toBe(5)
+  })
+
+  it('names what a size cannot draw', () => {
+    const scene = buildScene(raglanFailingInXXL, viewOf(raglanFailingInXXL), null, true)
+    expect(scene.ghosts).toHaveLength(15)
+    expect(scene.ghosts.filter((ghost) => ghost.cutD !== null)).toHaveLength(14)
+    expect(scene.legend.at(-1)?.gaps).toEqual(['Front: no cut line', 'Neckband: no outline'])
   })
 })

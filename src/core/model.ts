@@ -9,7 +9,12 @@ import { z } from 'zod'
 
 export const CURRENT_SCHEMA_VERSION = 1
 
-export const SizeNameSchema = z.string().min(1)
+/** Not empty, no surrounding spaces, and not a name every object inherits (__proto__, constructor, toString...). */
+export function isSizeName(name: string): boolean {
+  return name !== '' && name === name.trim() && !(name in Object.prototype)
+}
+
+export const SizeNameSchema = z.string().refine(isSizeName, 'Not a valid size name')
 export type SizeName = z.infer<typeof SizeNameSchema>
 
 export const IdSchema = z.string().min(1)
@@ -105,7 +110,9 @@ export const PieceSchema = z.object({
   grainline: z.tuple([IdSchema, IdSchema]),
   cutCount: z.number().int().positive(),
   /** The outline segment this piece is cut on the fold along. */
-  fold: IdSchema.optional()
+  fold: IdSchema.optional(),
+  /** The point held fixed across sizes in the nested view. Absent means draft coordinates already nest. */
+  stackPoint: IdSchema.optional()
 })
 export type Piece = z.infer<typeof PieceSchema>
 
@@ -147,8 +154,10 @@ export const PatternSchema = z.object({
   /** Schema version, used by migrations. */
   version: z.number().int().positive(),
   units: DisplayUnitsSchema,
-  sizes: z.array(SizeNameSchema).min(1),
-  activeSize: SizeNameSchema,
+  sizes: z
+    .tuple([SizeNameSchema])
+    .rest(SizeNameSchema)
+    .refine((sizes) => new Set(sizes.map((size) => size.toLowerCase())).size === sizes.length, 'Two sizes have the same name'),
   measurements: z.array(MeasurementSchema),
   variables: z.array(VariableSchema),
   points: z.array(PointSchema),

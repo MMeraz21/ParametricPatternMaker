@@ -2,25 +2,26 @@ import {
   UNIT_LABEL,
   applyEdit,
   checkName,
+  checkSizeName,
   freshId,
   formatLength,
   toMm,
   newItem,
+  newSizeName,
   sameItem,
   withoutOverride,
-  type EvaluationIssue,
   type ItemKey,
-  type ItemKind,
   type ItemRef,
   type NamedItemKey,
   type Pattern,
   type PatternEdit,
   type Piece,
   type PiecePatch,
-  type ResolvedPattern,
-  type Segment
+  type Segment,
+  type ShownIssue,
+  type SizeView
 } from '@core'
-import type { Selection } from '../editor/state'
+import type { PanelKind, Selection } from '../editor/state'
 
 /**
  * The editor panels as plain data, rendered by one EditableTable. Every per-kind decision
@@ -44,7 +45,7 @@ export interface TextCell {
   /** Accessible name, '<row> <column>', e.g. 'chest M'. */
   readonly label: string
   readonly text: string
-  readonly issues: readonly EvaluationIssue[]
+  readonly issues: readonly ShownIssue[]
   readonly commit: (draft: string) => CommitResult
 }
 
@@ -61,18 +62,19 @@ export type Cell = TextCell | ReadoutCell
 export interface Row {
   /** React key, unique within its table. Positional where a commit changes what identifies the row. */
   readonly id: string
-  /** What selecting this row selects. */
-  readonly key: ItemKey
+  /** What selecting this row selects. Null when a row isn't an item, like a size. */
+  readonly key: ItemKey | null
   readonly name: string
   readonly selected: boolean
   readonly cells: readonly Cell[]
-  readonly remove: PatternEdit
+  /** Null when it can't be removed, like the last size. */
+  readonly remove: PatternEdit | null
 }
 
 export interface TableModel {
   /** Stable across renames, and different for each piece's tables, so a draft can't carry between them. */
   readonly id: string
-  readonly kind: ItemKind
+  readonly kind: PanelKind
   readonly title: string
   readonly columns: readonly Column[]
   readonly rows: readonly Row[]
@@ -87,12 +89,11 @@ const column = (id: string, header: string, options: Partial<Pick<Column, 'numer
   emphasis: options.emphasis ?? false
 })
 
-const issuesAbout = (resolved: ResolvedPattern, matches: (item: ItemRef) => boolean): EvaluationIssue[] =>
-  resolved.issues.filter((issue) => issue.kind !== 'unknown-size' && matches(issue.item))
+const issuesAbout = (view: SizeView, matches: (item: ItemRef) => boolean): ShownIssue[] => view.issues.filter((issue) => matches(issue.item))
 
-const NAME_ISSUES = new Set<EvaluationIssue['kind']>(['invalid-name', 'duplicate-name', 'duplicate-id'])
+const NAME_ISSUES = new Set<ShownIssue['kind']>(['invalid-name', 'duplicate-name', 'duplicate-id'])
 
-function nameCell(pattern: Pattern, key: NamedItemKey, name: string, issues: readonly EvaluationIssue[]): TextCell {
+function nameCell(pattern: Pattern, key: NamedItemKey, name: string, issues: readonly ShownIssue[]): TextCell {
   return {
     kind: 'text',
     columnId: 'name',
@@ -122,24 +123,24 @@ const firstByName = <T extends { name: string }>(items: readonly T[]): T[] => {
 
 const isSelected = (selection: Selection | null, key: ItemKey): boolean => selection !== null && sameItem(selection, key)
 
-export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+export function measurementTable(pattern: Pattern, view: SizeView, selection: Selection | null): TableModel {
   const columns = [
     column('name', 'Name'),
-    ...pattern.sizes.map((size) => column(size, size, { numeric: true, emphasis: size === pattern.activeSize }))
+    // The prefix keeps a size called 'name' from colliding with the name column.
+    ...pattern.sizes.map((size) => column(`size:${size}`, size, { numeric: true, emphasis: size === view.size }))
   ]
   const rows = firstByName(pattern.measurements).map((measurement, index): Row => {
     const key: NamedItemKey = { kind: 'measurement', name: measurement.name }
-    const issues = issuesAbout(resolved, (item) => item.kind === 'measurement' && item.name === measurement.name)
+    const issues = issuesAbout(view, (item) => item.kind === 'measurement' && item.name === measurement.name)
     const valueCells = pattern.sizes.map((size): TextCell => {
       const mm = measurement.values[size]
       const text = mm === undefined ? '' : formatLength(mm, pattern.units)
       return {
         kind: 'text',
-        columnId: size,
+        columnId: `size:${size}`,
         label: `${measurement.name} ${size}`,
         text,
-        // missing-measurement-value is reported for the active size only.
-        issues: size === pattern.activeSize ? issues.filter((issue) => issue.kind === 'missing-measurement-value') : [],
+        issues: issues.filter((issue) => issue.kind === 'missing-measurement-value' && issue.sizes.includes(size)),
         commit: (draft) => {
           // Typed in display units. Committing the displayed (rounded) text unchanged keeps the exact mm.
           if (draft.trim() === text) return { ok: true, edit: null }
@@ -161,12 +162,12 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
   return { id: 'measurement', kind: 'measurement', title: `Measurements (${UNIT_LABEL[pattern.units]})`, columns, rows, add: { label: 'Add measurement', edit: { kind: 'add', item: newItem(pattern, 'measurement') } } }
 }
 
-export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+export function variableTable(pattern: Pattern, view: SizeView, selection: Selection | null): TableModel {
   const columns = [column('name', 'Name'), column('formula', 'Formula'), column('value', `Value (${UNIT_LABEL[pattern.units]})`, { numeric: true })]
   const rows = firstByName(pattern.variables).map((variable, index): Row => {
     const key: NamedItemKey = { kind: 'variable', name: variable.name }
-    const issues = issuesAbout(resolved, (item) => item.kind === 'variable' && item.name === variable.name)
-    const value = resolved.variables[variable.name]
+    const issues = issuesAbout(view, (item) => item.kind === 'variable' && item.name === variable.name)
+    const value = view.resolved.variables[variable.name]
     return {
       id: String(index),
       key,
@@ -193,7 +194,7 @@ export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selec
   return { id: 'variable', kind: 'variable', title: 'Variables', columns, rows, add: { label: 'Add variable', edit: { kind: 'add', item: newItem(pattern, 'variable') } } }
 }
 
-export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+export function pointTable(pattern: Pattern, view: SizeView, selection: Selection | null): TableModel {
   const columns = [column('name', 'Name'), column('x', 'x'), column('y', 'y')]
   const seen = new Set<string>()
   const rows: Row[] = []
@@ -202,13 +203,13 @@ export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selectio
     if (seen.has(point.id)) continue
     seen.add(point.id)
     const key: NamedItemKey = { kind: 'point', id: point.id }
-    const issues = issuesAbout(resolved, (item) => (item.kind === 'point' || item.kind === 'pointCoord') && item.id === point.id)
+    const issues = issuesAbout(view, (item) => (item.kind === 'point' || item.kind === 'pointCoord') && item.id === point.id)
     const axisCell = (axis: 'x' | 'y'): TextCell => ({
       kind: 'text',
       columnId: axis,
       label: `${point.name} ${axis}`,
       text: point[axis],
-      issues: issues.filter((issue) => issue.kind !== 'unknown-size' && issue.item.kind === 'pointCoord' && issue.item.axis === axis),
+      issues: issues.filter(({ item }) => item.kind === 'pointCoord' && item.axis === axis),
       commit: (draft) =>
         draft === point[axis]
           ? { ok: true, edit: null }
@@ -242,7 +243,7 @@ function withSegmentKind(segment: Segment, kind: Segment['kind']): Segment {
   return kind === 'line' ? { id, kind, from, to } : { id, kind, from, c1: from, c2: to, to }
 }
 
-export function segmentTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+export function segmentTable(pattern: Pattern, view: SizeView, selection: Selection | null): TableModel {
   const columns = [column('id', 'Id'), column('kind', 'Kind'), column('from', 'From'), column('c1', 'C1'), column('c2', 'C2'), column('to', 'To')]
   const seen = new Set<string>()
   const rows: Row[] = []
@@ -250,8 +251,8 @@ export function segmentTable(pattern: Pattern, resolved: ResolvedPattern, select
     if (seen.has(segment.id)) continue
     seen.add(segment.id)
     const key: ItemKey = { kind: 'segment', id: segment.id }
-    const issues = issuesAbout(resolved, (item) => item.kind === 'segment' && item.id === segment.id)
-    const pointCell = (columnId: string, current: string, update: (id: string) => Segment, cellIssues: readonly EvaluationIssue[] = []): TextCell => ({
+    const issues = issuesAbout(view, (item) => item.kind === 'segment' && item.id === segment.id)
+    const pointCell = (columnId: string, current: string, update: (id: string) => Segment, cellIssues: readonly ShownIssue[] = []): TextCell => ({
       kind: 'text',
       columnId,
       label: `${segment.id} ${columnId}`,
@@ -295,30 +296,34 @@ export function segmentTable(pattern: Pattern, resolved: ResolvedPattern, select
 const setPiece = (piece: Piece, patch: PiecePatch): PatternEdit => ({ kind: 'setPiece', pieceId: piece.id, patch })
 
 /** A cell that replaces part of a piece. Committing the text unchanged is never an edit. */
-function pieceCell(columnId: string, label: string, text: string, issues: readonly EvaluationIssue[], commit: (draft: string) => CommitResult): TextCell {
+function pieceCell(columnId: string, label: string, text: string, issues: readonly ShownIssue[], commit: (draft: string) => CommitResult): TextCell {
   return { kind: 'text', columnId, label, text, issues, commit: (draft) => (draft === text ? { ok: true, edit: null } : commit(draft)) }
 }
 
+/** Whether an issue about a piece is that one of the points it refers to failed. */
+const failsOnPoint = (pattern: Pattern, issue: ShownIssue, id: string): boolean =>
+  (issue.kind === 'missing-point' && issue.pointId === id) || (issue.kind === 'dependency-failed' && issue.dependency === pointLabel(pattern, id))
+
 /** Which column of the piece table an issue about the piece belongs in. */
-function pieceIssueColumn(pattern: Pattern, piece: Piece, issue: EvaluationIssue): 'grainFrom' | 'grainTo' | 'fold' | 'name' {
+function pieceIssueColumn(pattern: Pattern, piece: Piece, issue: ShownIssue): 'grainFrom' | 'grainTo' | 'fold' | 'stackPoint' | 'name' {
   const [from, to] = piece.grainline
-  const isEnd = (id: string): boolean =>
-    (issue.kind === 'missing-point' && issue.pointId === id) || (issue.kind === 'dependency-failed' && issue.dependency === pointLabel(pattern, id))
   if (issue.kind === 'invalid-fold-edge') return 'fold'
-  if (issue.kind === 'degenerate-grainline' || isEnd(from)) return 'grainFrom'
-  return isEnd(to) ? 'grainTo' : 'name'
+  if (issue.kind === 'degenerate-grainline' || failsOnPoint(pattern, issue, from)) return 'grainFrom'
+  if (failsOnPoint(pattern, issue, to)) return 'grainTo'
+  return piece.stackPoint !== undefined && failsOnPoint(pattern, issue, piece.stackPoint) ? 'stackPoint' : 'name'
 }
 
 const notAnEdge = (piece: Piece, segmentId: string): CommitResult => ({ ok: false, message: `'${segmentId}' is not an edge of ${piece.name}` })
 const hasEdge = (piece: Piece, segmentId: string): boolean => piece.outline.some((edge) => edge.segmentId === segmentId)
 
-export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+export function pieceTable(pattern: Pattern, view: SizeView, selection: Selection | null): TableModel {
   const columns = [
     column('name', 'Name'),
     column('allowance', 'Allowance'),
     column('grainFrom', 'Grain from'),
     column('grainTo', 'Grain to'),
     column('fold', 'Fold'),
+    column('stackPoint', 'Stack point'),
     column('cutCount', 'Cut count', { numeric: true })
   ]
   const seen = new Set<string>()
@@ -327,8 +332,8 @@ export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selectio
     if (seen.has(piece.id)) continue
     seen.add(piece.id)
     const key: ItemKey = { kind: 'piece', id: piece.id }
-    const pieceIssues = issuesAbout(resolved, (item) => item.kind === 'piece' && item.id === piece.id)
-    const issuesIn = (columnId: ReturnType<typeof pieceIssueColumn>): EvaluationIssue[] => pieceIssues.filter((issue) => pieceIssueColumn(pattern, piece, issue) === columnId)
+    const pieceIssues = issuesAbout(view, (item) => item.kind === 'piece' && item.id === piece.id)
+    const issuesIn = (columnId: ReturnType<typeof pieceIssueColumn>): ShownIssue[] => pieceIssues.filter((issue) => pieceIssueColumn(pattern, piece, issue) === columnId)
     const [grainFrom, grainTo] = piece.grainline
     const grainCell = (columnId: 'grainFrom' | 'grainTo', label: string, current: string, update: (id: string) => [string, string]): TextCell => ({
       kind: 'text',
@@ -349,7 +354,7 @@ export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selectio
           'allowance',
           `${piece.name} allowance`,
           piece.seamAllowance.default,
-          issuesAbout(resolved, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === null),
+          issuesAbout(view, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === null),
           (draft) => ({ ok: true, edit: setPiece(piece, { seamAllowance: { ...piece.seamAllowance, default: draft } }) })
         ),
         grainCell('grainFrom', 'grain from', grainFrom, (id) => [id, grainTo]),
@@ -359,6 +364,17 @@ export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selectio
           if (segmentId === '') return { ok: true, edit: setPiece(piece, { fold: null }) }
           return hasEdge(piece, segmentId) ? { ok: true, edit: setPiece(piece, { fold: segmentId }) } : notAnEdge(piece, segmentId)
         }),
+        pieceCell(
+          'stackPoint',
+          `${piece.name} stack point`,
+          piece.stackPoint === undefined ? '' : pointLabel(pattern, piece.stackPoint),
+          // A stack point can share a point with the grainline, so a failure there is shown in both.
+          pieceIssues.filter((issue) => piece.stackPoint !== undefined && failsOnPoint(pattern, issue, piece.stackPoint)),
+          (draft) => {
+            if (draft.trim() === '') return { ok: true, edit: setPiece(piece, { stackPoint: null }) }
+            return commitPoint(pattern, draft, piece.stackPoint ?? '', (id) => setPiece(piece, { stackPoint: id }))
+          }
+        ),
         pieceCell('cutCount', `${piece.name} cut count`, String(piece.cutCount), [], (draft) => {
           const cutCount = Number(draft.trim())
           if (draft.trim() === '' || !Number.isInteger(cutCount) || cutCount < 1) return { ok: false, message: 'Cut count must be a whole number of 1 or more' }
@@ -371,14 +387,15 @@ export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selectio
   return { id: 'piece', kind: 'piece', title: 'Pieces', columns, rows, add: { label: 'Add piece', edit: { kind: 'add', item: newItem(pattern, 'piece') } } }
 }
 
-export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Piece): TableModel {
+export function edgeTable(pattern: Pattern, view: SizeView, piece: Piece): TableModel {
   const columns = [column('segment', 'Segment'), column('reversed', 'Reversed'), column('allowance', 'Allowance'), column('length', `Length (${UNIT_LABEL[pattern.units]})`, { numeric: true })]
   const key: ItemKey = { kind: 'piece', id: piece.id }
   const perEdge = piece.seamAllowance.perEdge ?? {}
   const rows = piece.outline.map((edge, index): Row => {
     const { segmentId } = edge
     const override = Object.hasOwn(perEdge, segmentId) ? perEdge[segmentId] : undefined
-    const length = Object.hasOwn(resolved.segments, segmentId) ? resolved.segments[segmentId]?.length : undefined
+    const { segments } = view.resolved
+    const length = Object.hasOwn(segments, segmentId) ? segments[segmentId]?.length : undefined
     return {
       id: String(index),
       key,
@@ -401,7 +418,7 @@ export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Pi
           'allowance',
           `${segmentId} allowance`,
           override ?? '',
-          issuesAbout(resolved, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === segmentId),
+          issuesAbout(view, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === segmentId),
           (draft) => {
             const seamAllowance = draft.trim() === '' ? withoutOverride(piece.seamAllowance, segmentId) : { ...piece.seamAllowance, perEdge: { ...perEdge, [segmentId]: draft } }
             return { ok: true, edit: setPiece(piece, { seamAllowance }) }
@@ -423,7 +440,7 @@ export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Pi
   }
 }
 
-export function notchTable(pattern: Pattern, resolved: ResolvedPattern, piece: Piece): TableModel {
+export function notchTable(pattern: Pattern, view: SizeView, piece: Piece): TableModel {
   const columns = [column('segment', 'Segment'), column('distance', 'Distance')]
   const key: ItemKey = { kind: 'piece', id: piece.id }
   const rows = piece.notches.map((notch, index): Row => {
@@ -442,7 +459,7 @@ export function notchTable(pattern: Pattern, resolved: ResolvedPattern, piece: P
           'distance',
           `${notch.id} distance`,
           notch.distance,
-          issuesAbout(resolved, (item) => item.kind === 'notch' && item.pieceId === piece.id && item.id === notch.id),
+          issuesAbout(view, (item) => item.kind === 'notch' && item.pieceId === piece.id && item.id === notch.id),
           (draft) => ({ ok: true, edit: setNotch({ ...notch, distance: draft }) })
         )
       ],
@@ -457,21 +474,49 @@ export function notchTable(pattern: Pattern, resolved: ResolvedPattern, piece: P
   return { id: `notches:${piece.id}`, kind: 'piece', title: `Notches of ${piece.name}`, columns, rows, add }
 }
 
+export function sizeTable(pattern: Pattern, view: SizeView): TableModel {
+  const rows = pattern.sizes.map((size, index): Row => ({
+    id: String(index),
+    key: null,
+    name: size,
+    selected: size === view.size,
+    cells: [
+      {
+        kind: 'text',
+        columnId: 'name',
+        label: `${size} name`,
+        text: size,
+        issues: [],
+        commit: (draft) => {
+          const to = draft.trim()
+          if (to === size) return { ok: true, edit: null }
+          const problem = checkSizeName(pattern, to, size)
+          return problem ? { ok: false, message: problem.message } : { ok: true, edit: { kind: 'renameSize', from: size, to } }
+        }
+      }
+    ],
+    remove: pattern.sizes.length > 1 ? { kind: 'removeSize', name: size } : null
+  }))
+  return { id: 'size', kind: 'size', title: 'Sizes', columns: [column('name', 'Name')], rows, add: { label: 'Add size', edit: { kind: 'addSize', name: newSizeName(pattern), after: view.size } } }
+}
+
 /** The tables a tab shows. The Pieces tab grows the selected piece's edges and notches. */
-export function tablesFor(kind: ItemKind, pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): readonly TableModel[] {
+export function tablesFor(kind: PanelKind, pattern: Pattern, view: SizeView, selection: Selection | null): readonly TableModel[] {
   switch (kind) {
     case 'measurement':
-      return [measurementTable(pattern, resolved, selection)]
+      return [measurementTable(pattern, view, selection)]
     case 'variable':
-      return [variableTable(pattern, resolved, selection)]
+      return [variableTable(pattern, view, selection)]
     case 'point':
-      return [pointTable(pattern, resolved, selection)]
+      return [pointTable(pattern, view, selection)]
     case 'segment':
-      return [segmentTable(pattern, resolved, selection)]
+      return [segmentTable(pattern, view, selection)]
+    case 'size':
+      return [sizeTable(pattern, view)]
     case 'piece': {
       const piece = selection?.kind === 'piece' ? pattern.pieces.find((candidate) => candidate.id === selection.id) : undefined
-      const pieces = pieceTable(pattern, resolved, selection)
-      return piece ? [pieces, edgeTable(pattern, resolved, piece), notchTable(pattern, resolved, piece)] : [pieces]
+      const pieces = pieceTable(pattern, view, selection)
+      return piece ? [pieces, edgeTable(pattern, view, piece), notchTable(pattern, view, piece)] : [pieces]
     }
     default: {
       const _exhaustive: never = kind

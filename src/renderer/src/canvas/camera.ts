@@ -86,6 +86,13 @@ export function fitBounds(bounds: Bounds | null, viewport: Viewport, padding = 3
   }
 }
 
+/** Whether all of `bounds` is on screen, at least `padding` px from every edge. */
+export function containsBounds(camera: Camera, viewport: Viewport, bounds: Bounds, padding = 0): boolean {
+  const min = worldToScreen(camera, viewport, bounds.min)
+  const max = worldToScreen(camera, viewport, bounds.max)
+  return min.x >= padding && min.y >= padding && max.x <= viewport.width - padding && max.y <= viewport.height - padding
+}
+
 export function boundsOf(points: Iterable<Vec2>): Bounds | null {
   let bounds: Bounds | null = null
   for (const { x, y } of points) {
@@ -110,6 +117,8 @@ export type CameraAction =
   | { readonly type: 'zoom'; readonly factor: number; readonly anchor?: Vec2 }
   | { readonly type: 'pan'; readonly delta: Vec2 }
   | { readonly type: 'fit'; readonly bounds: Bounds | null }
+  /** Fits `all`, but only if the whole of `shown` was in view and `all` isn't, so a zoomed-in view is never lost. */
+  | { readonly type: 'reveal'; readonly shown: Bounds | null; readonly all: Bounds | null }
 
 export const initialCameraState: CameraState = { viewport: null, camera: null }
 
@@ -131,6 +140,9 @@ export function cameraReducer(state: CameraState, action: CameraAction): CameraS
       return { viewport, camera: panBy(camera, action.delta) }
     case 'fit':
       return { viewport, camera: fitBounds(action.bounds, viewport) }
+    case 'reveal':
+      if (!action.shown || !action.all || !containsBounds(camera, viewport, action.shown) || containsBounds(camera, viewport, action.all)) return state
+      return { viewport, camera: fitBounds(action.all, viewport) }
     default: {
       const _exhaustive: never = action
       return _exhaustive

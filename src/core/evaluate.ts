@@ -59,6 +59,9 @@ export type EvaluationIssue =
   | { kind: 'degenerate-grainline'; item: ItemRef; message: string }
   | { kind: 'cut-line-failed'; item: ItemRef; failure: CutLineFailure; message: string }
 
+/** Every issue except `unknown-size`, which graded evaluation cannot produce. */
+export type LocatedIssue = Exclude<EvaluationIssue, { kind: 'unknown-size' }>
+
 export interface ResolvedPoint {
   id: Id
   name: string

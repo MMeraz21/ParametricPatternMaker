@@ -3,6 +3,7 @@ import {
   MAX_SCALE,
   boundsOf,
   cameraReducer,
+  containsBounds,
   fitBounds,
   initialCameraState,
   panBy,
@@ -89,5 +90,43 @@ describe('cameraReducer', () => {
     const zoomed = cameraReducer(sized, { type: 'zoom', factor: 2 })
     expect(zoomed.camera?.center).toEqual(sized.camera?.center)
     expect(zoomed.camera?.scale).toBe((sized.camera?.scale ?? 0) * 2)
+  })
+})
+
+describe('reveal', () => {
+  const viewport = { width: 400, height: 400 }
+  const shown = { min: { x: 0, y: 0 }, max: { x: 100, y: 100 } }
+  const all = { min: { x: 0, y: 0 }, max: { x: 200, y: 100 } }
+  const fitted = cameraReducer(cameraReducer(initialCameraState, { type: 'resize', viewport, bounds: shown }), { type: 'fit', bounds: shown })
+
+  it('fits everything when the whole shown size was in view and the rest is not', () => {
+    const next = cameraReducer(fitted, { type: 'reveal', shown, all })
+    expect(next.camera).toEqual(fitBounds(all, viewport))
+  })
+
+  it('stays put when everything already fits', () => {
+    expect(cameraReducer(fitted, { type: 'reveal', shown, all: shown })).toBe(fitted)
+  })
+
+  it('does not lose a zoomed-in view', () => {
+    const zoomed = cameraReducer(fitted, { type: 'zoom', factor: 4 })
+    expect(cameraReducer(zoomed, { type: 'reveal', shown, all })).toBe(zoomed)
+  })
+
+  it('does nothing before there is a camera, or with nothing to show', () => {
+    expect(cameraReducer(initialCameraState, { type: 'reveal', shown, all })).toBe(initialCameraState)
+    expect(cameraReducer(fitted, { type: 'reveal', shown: null, all })).toBe(fitted)
+  })
+})
+
+describe('containsBounds', () => {
+  const viewport = { width: 100, height: 100 }
+  const camera = { center: { x: 50, y: 50 }, scale: 1 }
+
+  it('is true only when every edge is on screen, inside the padding', () => {
+    const bounds = { min: { x: 10, y: 10 }, max: { x: 90, y: 90 } }
+    expect(containsBounds(camera, viewport, bounds)).toBe(true)
+    expect(containsBounds(camera, viewport, bounds, 11)).toBe(false)
+    expect(containsBounds(camera, viewport, { min: { x: -1, y: 0 }, max: { x: 50, y: 50 } })).toBe(false)
   })
 })

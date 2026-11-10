@@ -41,12 +41,6 @@ Deleting a measurement, variable or point that other formulas use is allowed. Th
 (by renaming or adding) clears them. **Current default:** no confirmation and no "used by N" count.
 Possible additions are a confirmation that lists the dependents, or a "used by" column.
 
-### Adding, removing and renaming sizes (from M4)
-
-The measurement table has one column per size in `pattern.sizes`, but you can't add or remove sizes
-yet. **Current default:** sizes are fixed (S to XXL in the raglan). Designed for M6 in
-`docs/design/m6-size-switcher.md`. This moves to Decided when it's built.
-
 ### Which size should a file open at? (from M6)
 
 The size you're looking at isn't saved, so looking at another size never counts as changing the file. **Current default:** a file
@@ -164,6 +158,8 @@ canvas is the likely improvement.
 
 ## Decided
 
+- **Sizes can be added, removed and renamed** (M6) on the Sizes tab. Formulas never name a size, so they
+  aren't touched. The last size can't be removed. Details are in `docs/design/m6-size-switcher.md`.
 - **A piece's stack point is a field on the piece** (M6), rather than constants in the raglan's formulas. Constants
   would change where size M is drafted and tie the layout to the largest size. Whether a piece without one should
   get a guessed stack point is still open above.

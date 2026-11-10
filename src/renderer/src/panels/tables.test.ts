@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { applyEdit, evaluate, type Pattern } from '@core'
-import { raglanTee } from '@core/fixtures/raglan'
-import { edgeTable, measurementTable, notchTable, pieceTable, pointTable, segmentTable, tablesFor, variableTable, type Cell, type TableModel, type TextCell } from './tables'
+import { applyEdit, evaluateGraded, viewAt, type Pattern } from '@core'
+import { raglanFailingInXXL, raglanTee } from '@core/fixtures/raglan'
+import { edgeTable, measurementTable, notchTable, pieceTable, pointTable, segmentTable, sizeTable, tablesFor, variableTable, type Cell, type TableModel, type TextCell } from './tables'
 
-const resolved = evaluate(raglanTee, 'M')
+const viewOf = (pattern: Pattern, size = 'M') => viewAt(evaluateGraded(pattern), size)
+const view = viewOf(raglanTee)
 
 function cell(table: TableModel, row: string, columnId: string): Cell {
   const found = table.rows.find((r) => r.name === row)?.cells.find((c) => c.columnId === columnId)
@@ -18,7 +19,7 @@ function text(table: TableModel, row: string, columnId: string): TextCell {
 }
 
 describe('measurementTable', () => {
-  const table = measurementTable(raglanTee, resolved, null)
+  const table = measurementTable(raglanTee, view, null)
 
   it('has a column per size, highlighting the active one', () => {
     expect(table.columns.map((c) => [c.header, c.emphasis])).toEqual([
@@ -31,11 +32,11 @@ describe('measurementTable', () => {
     ])
     expect(table.rows.map((r) => r.name)).toEqual(['chest', 'neck', 'shoulder_width', 'back_length', 'armhole_depth'])
     expect(table.title).toBe('Measurements (cm)')
-    expect(text(table, 'chest', 'L')).toMatchObject({ label: 'chest L', text: '108' })
+    expect(text(table, 'chest', 'size:L')).toMatchObject({ label: 'chest L', text: '108' })
   })
 
   it('commits numbers in display units as setMeasurement in mm, and rejects anything else', () => {
-    const chestM = text(table, 'chest', 'M')
+    const chestM = text(table, 'chest', 'size:M')
     expect(chestM.commit('104')).toEqual({ ok: true, edit: { kind: 'setMeasurement', name: 'chest', size: 'M', value: 1040 } })
     expect(chestM.commit(' 100 ')).toEqual({ ok: true, edit: null })
     expect(chestM.commit('wide')).toEqual({ ok: false, message: "'wide' is not a number" })
@@ -44,9 +45,9 @@ describe('measurementTable', () => {
 
   it('shows and reads inches, keeping exact mm when the rounded text is committed unchanged', () => {
     const inches: Pattern = { ...raglanTee, units: 'in' }
-    const t = measurementTable(inches, evaluate(inches, 'M'), null)
+    const t = measurementTable(inches, viewOf(inches), null)
     expect(t.title).toBe('Measurements (in)')
-    const chestM = text(t, 'chest', 'M')
+    const chestM = text(t, 'chest', 'size:M')
     expect(chestM.text).toBe('39.37')
     expect(chestM.commit('39.37')).toEqual({ ok: true, edit: null })
     expect(chestM.commit('40')).toEqual({ ok: true, edit: { kind: 'setMeasurement', name: 'chest', size: 'M', value: 1016 } })
@@ -64,17 +65,18 @@ describe('measurementTable', () => {
     expect(table.rows[0]?.remove).toEqual({ kind: 'remove', item: { kind: 'measurement', name: 'chest' } })
   })
 
-  it('flags a missing value on the active size', () => {
+  it('flags a missing value in every size that lacks it', () => {
     const pattern: Pattern = { ...raglanTee, measurements: [{ name: 'chest', values: { S: 920 } }, ...raglanTee.measurements.slice(1)] }
-    const t = measurementTable(pattern, evaluate(pattern, 'M'), null)
-    expect(text(t, 'chest', 'M')).toMatchObject({ text: '', issues: [{ kind: 'missing-measurement-value' }] })
-    expect(text(t, 'chest', 'L').issues).toEqual([])
+    const t = measurementTable(pattern, viewOf(pattern), null)
+    expect(text(t, 'chest', 'size:M')).toMatchObject({ text: '', issues: [{ kind: 'missing-measurement-value' }] })
+    expect(text(t, 'chest', 'size:L').issues).toMatchObject([{ kind: 'missing-measurement-value' }])
+    expect(text(t, 'chest', 'size:S').issues).toEqual([])
   })
 })
 
 describe('variableTable', () => {
   it('shows formulas, values and the selected row', () => {
-    const table = variableTable(raglanTee, resolved, { kind: 'variable', name: 'body_width' })
+    const table = variableTable(raglanTee, view, { kind: 'variable', name: 'body_width' })
     expect(table.columns.map((c) => c.header)).toEqual(['Name', 'Formula', 'Value (cm)'])
     expect(text(table, 'body_width', 'formula').text).toBe('(chest + chest_ease) / 4')
     expect(cell(table, 'body_width', 'value')).toEqual({ kind: 'readout', columnId: 'value', label: 'body_width value', text: '27.5' })
@@ -82,13 +84,13 @@ describe('variableTable', () => {
   })
 
   it('commits formulas, even broken ones, and puts their issues on the formula cell', () => {
-    const table = variableTable(raglanTee, resolved, null)
+    const table = variableTable(raglanTee, view, null)
     expect(text(table, 'chest_ease', 'formula').commit('120')).toEqual({
       ok: true,
       edit: { kind: 'setFormula', owner: { kind: 'variable', name: 'chest_ease' }, formula: '120' }
     })
     const broken = applyEdit(raglanTee, { kind: 'setFormula', owner: { kind: 'variable', name: 'chest_ease' }, formula: '1 +' })
-    const t = variableTable(broken, evaluate(broken, 'M'), null)
+    const t = variableTable(broken, viewOf(broken), null)
     expect(text(t, 'chest_ease', 'formula').issues.map((i) => i.kind)).toEqual(['parse-error'])
     expect(text(t, 'chest_ease', 'name').issues).toEqual([])
     expect(cell(t, 'body_width', 'value')).toMatchObject({ text: null })
@@ -99,22 +101,22 @@ describe('review fixes', () => {
   it('rejects a rename that core would refuse, with a message', () => {
     // `e2` is a free, valid name, but `2.ease2` would become `2.e2`, which reads as the number 200.
     const pattern: Pattern = { ...raglanTee, variables: [...raglanTee.variables, { name: 'ease2', formula: '1' }, { name: 'w', formula: '2.ease2' }] }
-    const t = variableTable(pattern, evaluate(pattern, 'M'), null)
+    const t = variableTable(pattern, viewOf(pattern), null)
     expect(text(t, 'ease2', 'name').commit('e2')).toEqual({ ok: false, message: "Can't rename 'ease2' to 'e2' without changing what a formula means" })
     expect(text(t, 'ease2', 'name').commit('ease3')).toMatchObject({ ok: true })
   })
 
   it('shows one row per name when a pattern has duplicates', () => {
     const pattern: Pattern = { ...raglanTee, measurements: [...raglanTee.measurements, { name: 'chest', values: { M: 1 } }] }
-    const t = measurementTable(pattern, evaluate(pattern, 'M'), null)
+    const t = measurementTable(pattern, viewOf(pattern), null)
     expect(t.rows.filter((r) => r.name === 'chest')).toHaveLength(1)
-    expect(text(t, 'chest', 'M').text).toBe('100')
+    expect(text(t, 'chest', 'size:M').text).toBe('100')
   })
 })
 
 describe('pointTable', () => {
   it('lists points by name with editable formulas', () => {
-    const table = pointTable(raglanTee, resolved, null)
+    const table = pointTable(raglanTee, view, null)
     expect(table.rows.map((r) => r.name)).toEqual(raglanTee.points.map((p) => p.name))
     expect(table.rows.slice(0, 9).map((r) => r.name)).toEqual(['HPS', 'CFNeck', 'Underarm', 'SideHem', 'CFHem', 'NeckC1', 'NeckC2', 'RaglanC1', 'RaglanC2'])
     expect(text(table, 'HPS', 'x')).toMatchObject({ label: 'HPS x', text: 'neck_width' })
@@ -124,7 +126,7 @@ describe('pointTable', () => {
 })
 
 describe('segmentTable', () => {
-  const table = segmentTable(raglanTee, resolved, null)
+  const table = segmentTable(raglanTee, view, null)
   const frontCf = { id: 'frontCf', kind: 'line', from: 'cfNeck', to: 'cfHem' } as const
 
   it('shows one row per segment, with points by name', () => {
@@ -157,7 +159,7 @@ describe('segmentTable', () => {
 
   it('shows an id that matches no point, and puts the segment issues on the row', () => {
     const pattern = applyEdit(raglanTee, { kind: 'remove', item: { kind: 'point', id: 'cfNeck' } })
-    const t = segmentTable(pattern, evaluate(pattern, 'M'), null)
+    const t = segmentTable(pattern, viewOf(pattern), null)
     expect(text(t, 'frontCf', 'from')).toMatchObject({ text: 'cfNeck', issues: [{ kind: 'missing-point' }] })
   })
 
@@ -168,12 +170,12 @@ describe('segmentTable', () => {
 })
 
 describe('pieceTable', () => {
-  const table = pieceTable(raglanTee, resolved, { kind: 'piece', id: 'back' })
+  const table = pieceTable(raglanTee, view, { kind: 'piece', id: 'back' })
   const front = raglanTee.pieces[0]
   const set = (patch: object) => ({ ok: true, edit: { kind: 'setPiece', pieceId: 'front', patch } })
 
   it('shows one row per piece', () => {
-    expect(table.columns.map((c) => c.header)).toEqual(['Name', 'Allowance', 'Grain from', 'Grain to', 'Fold', 'Cut count'])
+    expect(table.columns.map((c) => c.header)).toEqual(['Name', 'Allowance', 'Grain from', 'Grain to', 'Fold', 'Stack point', 'Cut count'])
     expect(table.rows.map((r) => r.name)).toEqual(['Front', 'Back', 'Sleeve', 'Neckband'])
     expect(table.rows.filter((r) => r.selected).map((r) => r.name)).toEqual(['Back'])
     expect(text(table, 'Front', 'allowance')).toMatchObject({ label: 'Front allowance', text: '10' })
@@ -208,20 +210,20 @@ describe('pieceTable', () => {
 
   it('puts each issue on the cell it is about', () => {
     const broken = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: 'nope' } } })
-    const t = pieceTable(broken, evaluate(broken, 'M'), null)
+    const t = pieceTable(broken, viewOf(broken), null)
     expect(text(t, 'Front', 'allowance').issues.map((i) => i.kind)).toEqual(['undefined-reference'])
 
     const badFold = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { fold: 'frontNeck' } })
-    const u = pieceTable(badFold, evaluate(badFold, 'M'), null)
+    const u = pieceTable(badFold, viewOf(badFold), null)
     expect(text(u, 'Front', 'fold').issues.map((i) => i.kind)).toEqual(['invalid-fold-edge'])
     expect(text(u, 'Front', 'name').issues).toEqual([])
 
     const badGrain = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { grainline: ['hps', 'hps'] } })
-    const v = pieceTable(badGrain, evaluate(badGrain, 'M'), null)
+    const v = pieceTable(badGrain, viewOf(badGrain), null)
     expect(text(v, 'Front', 'grainFrom').issues.map((i) => i.kind)).toEqual(['degenerate-grainline'])
 
     const failed = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: '1e6' } } })
-    const w = pieceTable(failed, evaluate(failed, 'M'), null)
+    const w = pieceTable(failed, viewOf(failed), null)
     expect(text(w, 'Front', 'name').issues.map((i) => i.kind)).toEqual(['cut-line-failed'])
   })
 
@@ -235,7 +237,7 @@ describe('pieceTable', () => {
 describe('edgeTable', () => {
   const front = raglanTee.pieces[0]
   if (!front) throw new Error('raglan has a front')
-  const table = edgeTable(raglanTee, resolved, front)
+  const table = edgeTable(raglanTee, view, front)
   const setAllowance = (seamAllowance: object) => ({ ok: true, edit: { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance } } })
   const others = { frontHem: '25' }
 
@@ -280,20 +282,20 @@ describe('edgeTable', () => {
 
   it('offers no add when there is no segment to add', () => {
     const empty: Pattern = { ...raglanTee, segments: [] }
-    expect(edgeTable(empty, evaluate(empty, 'M'), front).add).toBeNull()
+    expect(edgeTable(empty, viewOf(empty), front).add).toBeNull()
   })
 
   it('reads an override by own property, for a segment id like constructor', () => {
     const odd = { ...front, outline: [{ segmentId: 'constructor' }], seamAllowance: { default: '10', perEdge: { frontHem: '25' } } }
     const pattern: Pattern = { ...raglanTee, pieces: [odd] }
-    const t = edgeTable(pattern, evaluate(pattern, 'M'), odd)
+    const t = edgeTable(pattern, viewOf(pattern), odd)
     expect(text(t, 'constructor', 'allowance').text).toBe('')
     expect(cell(t, 'constructor', 'length')).toMatchObject({ text: null })
   })
 
   it('puts a stale or broken override on its cell', () => {
     const broken = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: '10', perEdge: { frontHem: 'nope' } } } })
-    const t = edgeTable(broken, evaluate(broken, 'M'), broken.pieces[0] ?? front)
+    const t = edgeTable(broken, viewOf(broken), broken.pieces[0] ?? front)
     expect(text(t, 'frontHem', 'allowance').issues.map((i) => i.kind)).toEqual(['undefined-reference'])
   })
 })
@@ -301,7 +303,7 @@ describe('edgeTable', () => {
 describe('notchTable', () => {
   const front = raglanTee.pieces[0]
   if (!front) throw new Error('raglan has a front')
-  const table = notchTable(raglanTee, resolved, front)
+  const table = notchTable(raglanTee, view, front)
   const patch = (notches: object[]) => ({ kind: 'setPiece', pieceId: 'front', patch: { notches } })
   const [notch] = front.notches
   if (!notch) throw new Error('front has a notch')
@@ -325,39 +327,129 @@ describe('notchTable', () => {
   })
 
   it('offers no add on a piece with no edges, since a notch needs one', () => {
-    expect(notchTable(raglanTee, resolved, { ...front, outline: [] }).add).toBeNull()
+    expect(notchTable(raglanTee, view, { ...front, outline: [] }).add).toBeNull()
   })
 
   it('puts a notch issue on its distance', () => {
     const broken = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { notches: [{ ...notch, distance: 'nope' }] } })
-    const t = notchTable(broken, evaluate(broken, 'M'), broken.pieces[0] ?? front)
+    const t = notchTable(broken, viewOf(broken), broken.pieces[0] ?? front)
     expect(text(t, 'frontRaglanNotch', 'distance').issues.map((i) => i.kind)).toEqual(['undefined-reference'])
   })
 })
 
 describe('tablesFor', () => {
   it('gives one table for the other tabs', () => {
-    expect(tablesFor('segment', raglanTee, resolved, null).map((t) => t.title)).toEqual(['Segments'])
-    expect(tablesFor('variable', raglanTee, resolved, null).map((t) => t.title)).toEqual(['Variables'])
+    expect(tablesFor('segment', raglanTee, view, null).map((t) => t.title)).toEqual(['Segments'])
+    expect(tablesFor('variable', raglanTee, view, null).map((t) => t.title)).toEqual(['Variables'])
   })
 
   it('adds the edges and notches of the selected piece', () => {
-    expect(tablesFor('piece', raglanTee, resolved, null).map((t) => t.title)).toEqual(['Pieces'])
-    expect(tablesFor('piece', raglanTee, resolved, { kind: 'piece', id: 'front' }).map((t) => t.title)).toEqual(['Pieces', 'Edges of Front', 'Notches of Front'])
-    expect(tablesFor('piece', raglanTee, resolved, { kind: 'piece', id: 'ghost' }).map((t) => t.title)).toEqual(['Pieces'])
-    expect(tablesFor('piece', raglanTee, resolved, { kind: 'point', id: 'hps' }).map((t) => t.title)).toEqual(['Pieces'])
+    expect(tablesFor('piece', raglanTee, view, null).map((t) => t.title)).toEqual(['Pieces'])
+    expect(tablesFor('piece', raglanTee, view, { kind: 'piece', id: 'front' }).map((t) => t.title)).toEqual(['Pieces', 'Edges of Front', 'Notches of Front'])
+    expect(tablesFor('piece', raglanTee, view, { kind: 'piece', id: 'ghost' }).map((t) => t.title)).toEqual(['Pieces'])
+    expect(tablesFor('piece', raglanTee, view, { kind: 'point', id: 'hps' }).map((t) => t.title)).toEqual(['Pieces'])
   })
 
   it('keeps the tables of two pieces with the same name apart', () => {
     const twins: Pattern = { ...raglanTee, pieces: raglanTee.pieces.map((p) => ({ ...p, name: 'Twin' })) }
-    const of = (id: string) => tablesFor('piece', twins, evaluate(twins, 'M'), { kind: 'piece', id }).map((t) => t.id)
+    const of = (id: string) => tablesFor('piece', twins, viewOf(twins), { kind: 'piece', id }).map((t) => t.id)
     expect(of('front')[1]).not.toBe(of('back')[1])
     expect(of('front')[2]).not.toBe(of('back')[2])
     expect(new Set(of('front')).size).toBe(3)
   })
 
   it('gives every row a key unique within its table', () => {
-    const tables = tablesFor('piece', raglanTee, resolved, { kind: 'piece', id: 'front' })
+    const tables = tablesFor('piece', raglanTee, view, { kind: 'piece', id: 'front' })
     for (const table of tables) expect(new Set(table.rows.map((r) => r.id)).size).toBe(table.rows.length)
+  })
+})
+
+describe('tables in the context of every size', () => {
+  it('emphasises the column of the size on screen', () => {
+    expect(measurementTable(raglanTee, viewOf(raglanTee, 'XL'), null).columns.filter((c) => c.emphasis).map((c) => c.header)).toEqual(['XL'])
+  })
+
+  it('reads values from the size on screen', () => {
+    expect(cell(variableTable(raglanTee, viewOf(raglanTee, 'XXL'), null), 'body_width', 'value')).toMatchObject({ text: '34' })
+  })
+
+  it('flags a missing value in the column of each size that lacks it', () => {
+    const measurements = raglanTee.measurements.map((m) => (m.name === 'chest' ? { ...m, values: { S: 920, M: 1000, L: 1080 } } : m))
+    const pattern: Pattern = { ...raglanTee, measurements }
+    const t = measurementTable(pattern, viewOf(pattern), null)
+    expect(['S', 'M', 'L', 'XL', 'XXL'].map((size) => text(t, 'chest', `size:${size}`).issues.length)).toEqual([0, 0, 0, 1, 1])
+    expect(text(t, 'chest', 'size:XL').issues[0]).toMatchObject({ here: false, scope: 'XL, XXL' })
+  })
+
+  it('puts a problem from another size on the cell, marked as not here', () => {
+    const atM = variableTable(raglanFailingInXXL, viewOf(raglanFailingInXXL), null)
+    expect(text(atM, 'band_width', 'formula').issues).toEqual([])
+    const t = pieceTable(raglanFailingInXXL, viewOf(raglanFailingInXXL), null)
+    expect(text(t, 'Neckband', 'name').issues).toMatchObject([{ kind: 'degenerate-outline', here: false, openAt: 'XXL' }])
+    expect(text(pieceTable(raglanFailingInXXL, viewOf(raglanFailingInXXL, 'XXL'), null), 'Neckband', 'name').issues[0]?.here).toBe(true)
+  })
+
+  it('keeps a size named name apart from the name column', () => {
+    const pattern = applyEdit(raglanTee, { kind: 'renameSize', from: 'M', to: 'name' })
+    const t = measurementTable(pattern, viewOf(pattern, 'name'), null)
+    expect(text(t, 'chest', 'name').text).toBe('chest')
+    expect(text(t, 'chest', 'size:name').text).toBe('100')
+  })
+})
+
+describe('pieceTable stack point', () => {
+  const t = pieceTable(raglanTee, view, null)
+
+  it('shows the stack point by name, blank when there is none', () => {
+    expect(text(t, 'Sleeve', 'stackPoint').text).toBe('SleeveNeckC')
+    expect(text(t, 'Front', 'stackPoint').text).toBe('')
+  })
+
+  it('commits a point by name, clears on blank and refuses an unknown point', () => {
+    expect(text(t, 'Front', 'stackPoint').commit('HPS')).toEqual({ ok: true, edit: { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: 'hps' } } })
+    expect(text(t, 'Sleeve', 'stackPoint').commit('')).toEqual({ ok: true, edit: { kind: 'setPiece', pieceId: 'sleeve', patch: { stackPoint: null } } })
+    expect(text(t, 'Sleeve', 'stackPoint').commit('Nope')).toEqual({ ok: false, message: "No point named 'Nope'" })
+  })
+
+  it('shows a missing stack point in its own column', () => {
+    const pattern = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: 'ghost' } })
+    const u = pieceTable(pattern, viewOf(pattern), null)
+    expect(text(u, 'Front', 'stackPoint').issues.map((issue) => issue.kind)).toEqual(['missing-point'])
+    expect(text(u, 'Front', 'name').issues).toEqual([])
+  })
+})
+
+describe('sizeTable', () => {
+  const t = sizeTable(raglanTee, viewOf(raglanTee, 'L'))
+
+  it('has a row per size, marking the one on screen, and adds after it', () => {
+    expect(t.rows.map((r) => [r.name, r.selected])).toEqual([
+      ['S', false],
+      ['M', false],
+      ['L', true],
+      ['XL', false],
+      ['XXL', false]
+    ])
+    expect(t.add).toEqual({ label: 'Add size', edit: { kind: 'addSize', name: 'Size 1', after: 'L' } })
+    expect(t.rows.every((r) => r.key === null)).toBe(true)
+  })
+
+  it('renames through the name cell and refuses bad names', () => {
+    const name = text(t, 'M', 'name')
+    expect(name.commit(' Medium ')).toEqual({ ok: true, edit: { kind: 'renameSize', from: 'M', to: 'Medium' } })
+    expect(name.commit('M')).toEqual({ ok: true, edit: null })
+    expect(name.commit('xl')).toEqual({ ok: false, message: "There is already a size named 'XL'" })
+    expect(name.commit('__proto__')).toMatchObject({ ok: false })
+    expect(name.commit('')).toMatchObject({ ok: false })
+  })
+
+  it('removes a size, but offers no remove for the last one', () => {
+    expect(t.rows[0]?.remove).toEqual({ kind: 'removeSize', name: 'S' })
+    const one: Pattern = { ...raglanTee, sizes: ['M'] }
+    expect(sizeTable(one, viewOf(one)).rows[0]?.remove).toBeNull()
+  })
+
+  it('is what the Sizes tab shows', () => {
+    expect(tablesFor('size', raglanTee, view, null).map((table) => [table.title, table.kind])).toEqual([['Sizes', 'size']])
   })
 })

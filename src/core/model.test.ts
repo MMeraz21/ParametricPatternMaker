@@ -26,4 +26,29 @@ describe('parsePattern', () => {
     expect(parseWith({ default: '10', perEdge: { frontHem: 25 } })).toBe(false)
     expect(parseWith({ default: 'seam', perEdge: { frontHem: 'hem' } })).toBe(true)
   })
+
+  it.each([
+    ['duplicates', ['S', 'S']],
+    ['duplicates in another case', ['XL', 'xl']],
+    ['an empty name', ['']],
+    ['surrounding spaces', ['S ']],
+    ['__proto__', ['__proto__']],
+    ['constructor', ['constructor']]
+  ])('rejects sizes with %s', (_label, sizes) => {
+    expect(parsePattern({ ...raglanTee, sizes }).ok).toBe(false)
+  })
+
+  it('accepts sizes that are numbers or share a point name', () => {
+    expect(parsePattern({ ...raglanTee, sizes: ['38', 'HPS'] }).ok).toBe(true)
+  })
+
+  it('keeps a stack point through a JSON round trip', () => {
+    const pieces = raglanTee.pieces.map((piece) => ({ ...piece, stackPoint: 'hps' }))
+    expect(parsePattern(JSON.parse(JSON.stringify({ ...raglanTee, pieces })))).toEqual({ ok: true, pattern: { ...raglanTee, pieces } })
+  })
+
+  it('does not keep a saved active size', () => {
+    const result = parsePattern({ ...raglanTee, activeSize: 'M' })
+    expect(result.ok && Object.keys(result.pattern)).not.toContain('activeSize')
+  })
 })

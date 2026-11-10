@@ -8,7 +8,6 @@ function pattern(overrides: Partial<Pattern> = {}): Pattern {
     version: CURRENT_SCHEMA_VERSION,
     units: 'cm',
     sizes: ['S', 'M'],
-    activeSize: 'S',
     measurements: [{ name: 'chest', values: { S: 900, M: 1000 } }],
     variables: [],
     points: [],

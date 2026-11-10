@@ -1,6 +1,6 @@
 # Milestone 6: size switcher and graded view
 
-Status: designed, not built. `raglanFailingInXXL` is the only part already in the code.
+Status: built.
 
 Numbers marked **ran** come from experiments against the real `evaluate` and `buildScene` on an Apple-silicon laptop on
 2026-11-10. Product decisions with a working default are in `docs/open-questions.md`.
@@ -533,7 +533,6 @@ Judge suggestions I didn't take: a two-step remove, because a size column and a 
 - `PLAN.md:45` says `schemaVersion` and the code says `version`. Should this be settled before M8 closes the free window?
 - Amber versus red was chosen from code and hasn't been seen on screen.
 - `model.ts` and `evaluate.ts` change, so `/blast-radius` is required before shipping.
-- When built, "Adding, removing and renaming sizes" moves to Decided in `open-questions.md`.
 
 ## Build order
 

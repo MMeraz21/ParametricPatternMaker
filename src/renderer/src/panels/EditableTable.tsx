@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ItemKey, PatternEdit } from '@core'
+import { issueTone } from '../editor/inspect'
 import type { TableModel, TextCell } from './tables'
 
 interface EditableTableProps {
@@ -36,8 +37,8 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
               <tr
                 key={row.id}
                 aria-selected={row.selected}
-                onFocus={() => onSelect(row.key)}
-                onClick={() => onSelect(row.key)}
+                onFocus={() => row.key && onSelect(row.key)}
+                onClick={() => row.key && onSelect(row.key)}
                 className={`border-t border-neutral-100 ${row.selected ? 'bg-amber-50' : ''}`}
               >
                 {row.cells.map((cell) => {
@@ -55,19 +56,7 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
                   )
                 })}
                 <td className="px-1 py-0.5 text-center align-top">
-                  <button
-                    type="button"
-                    aria-label={`Delete ${row.name}`}
-                    // Selecting on focus can reflow the dock mid-press, moving this button out from under the click.
-                    onFocus={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onEdit(row.remove)
-                    }}
-                    className="rounded px-1 text-neutral-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    ×
-                  </button>
+                  {row.remove && <RemoveButton name={row.name} edit={row.remove} onEdit={onEdit} />}
                 </td>
               </tr>
             ))}
@@ -82,6 +71,24 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
         </div>
       )}
     </div>
+  )
+}
+
+function RemoveButton({ name, edit, onEdit }: { name: string; edit: PatternEdit; onEdit: (edit: PatternEdit) => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`Delete ${name}`}
+      // Selecting on focus can reflow the dock mid-press, moving this button out from under the click.
+      onFocus={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        onEdit(edit)
+      }}
+      className="rounded px-1 text-neutral-400 hover:bg-red-50 hover:text-red-600"
+    >
+      ×
+    </button>
   )
 }
 
@@ -115,7 +122,8 @@ function EditableCell({ cell, numeric, onEdit }: EditableCellProps) {
     setError(null)
   }
 
-  const problems = [...(error ? [error] : []), ...cell.issues.map((issue) => issue.message)]
+  const problems = [...(error ? [error] : []), ...cell.issues.map((issue) => issue.text)]
+  const tone = error ? 'here' : issueTone(cell.issues)
   return (
     <div>
       <input
@@ -137,7 +145,7 @@ function EditableCell({ cell, numeric, onEdit }: EditableCellProps) {
         }}
         className={`w-full rounded border bg-transparent px-1 py-0.5 font-mono outline-none focus:bg-white focus:ring-2 ${
           numeric ? 'text-right tabular-nums' : ''
-        } ${problems.length > 0 ? 'border-red-400 focus:ring-red-200' : 'border-transparent hover:border-neutral-200 focus:ring-sky-200'}`}
+        } ${{ here: 'border-red-400 focus:ring-red-200', elsewhere: 'border-amber-400 focus:ring-amber-200', none: 'border-transparent hover:border-neutral-200 focus:ring-sky-200' }[tone ?? 'none']}`}
       />
       {error && (
         <p role="alert" className="px-1 text-xs text-red-700">

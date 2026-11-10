@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyEdit, checkName, keyOf, newItem, sameItem, type PatternEdit, type PiecePatch } from './edit'
+import { applyEdit, checkName, checkSizeName, keyOf, newItem, newSizeName, sameItem, type PatternEdit, type PiecePatch } from './edit'
 import { evaluate } from './evaluate'
 import { raglanTee } from './fixtures/raglan'
 import type { Pattern, Piece } from './model'
@@ -354,5 +354,119 @@ describe('setUnits', () => {
     expect(next.measurements).toBe(raglanTee.measurements)
     expect(evaluate(next, 'M').points).toEqual(evaluate(raglanTee, 'M').points)
     expect(applyEdit(raglanTee, { kind: 'setUnits', units: 'cm' })).toBe(raglanTee)
+  })
+})
+
+describe('addSize', () => {
+  const next = applyEdit(raglanTee, { kind: 'addSize', name: 'XXXL', after: 'XXL' })
+
+  it('inserts the size after the one named, copying its value in every measurement', () => {
+    const middle = applyEdit(raglanTee, { kind: 'addSize', name: 'M2', after: 'M' })
+    expect(middle.sizes).toEqual(['S', 'M', 'M2', 'L', 'XL', 'XXL'])
+    expect(middle.measurements[0]?.values).toEqual({ S: 920, M: 1000, M2: 1000, L: 1080, XL: 1160, XXL: 1260 })
+    expect(middle.variables).toBe(raglanTee.variables)
+    expect(middle.points).toBe(raglanTee.points)
+  })
+
+  it('gives a size that evaluates exactly as the one it copied', () => {
+    expect(next.sizes.at(-1)).toBe('XXXL')
+    expect(evaluate(next, 'XXXL').issues).toEqual([])
+    expect(evaluate(next, 'XXXL').points).toEqual(evaluate(raglanTee, 'XXL').points)
+  })
+
+  it('leaves a measurement with no value to copy without one, so evaluate flags it', () => {
+    const [chest, ...rest] = raglanTee.measurements
+    if (!chest) throw new Error('no chest')
+    const { M: _gone, ...values } = chest.values
+    const gappy: Pattern = { ...raglanTee, measurements: [{ ...chest, values }, ...rest] }
+    const added = applyEdit(gappy, { kind: 'addSize', name: 'M2', after: 'M' })
+    expect(Object.keys(added.measurements[0]?.values ?? {})).not.toContain('M2')
+    expect(evaluate(added, 'M2').issues[0]).toMatchObject({ kind: 'missing-measurement-value', item: { kind: 'measurement', name: 'chest' } })
+  })
+
+  it.each([
+    ['a taken name', 'M', 'S'],
+    ['a name taken in another case', 'xl', 'S'],
+    ['an empty name', '', 'S'],
+    ['surrounding spaces', ' XS', 'S'],
+    ['__proto__', '__proto__', 'S'],
+    ['constructor', 'constructor', 'S'],
+    ['an unknown position', 'XS', 'ghost']
+  ])('refuses %s', (_label, name, after) => {
+    expect(applyEdit(raglanTee, { kind: 'addSize', name, after })).toBe(raglanTee)
+  })
+})
+
+describe('removeSize', () => {
+  it('removes the size and its value in every measurement', () => {
+    const next = applyEdit(raglanTee, { kind: 'removeSize', name: 'M' })
+    expect(next.sizes).toEqual(['S', 'L', 'XL', 'XXL'])
+    expect(next.measurements.every((measurement) => !Object.keys(measurement.values).includes('M'))).toBe(true)
+    expect(next.measurements[0]?.values).toEqual({ S: 920, L: 1080, XL: 1160, XXL: 1260 })
+    expect(next.points).toBe(raglanTee.points)
+  })
+
+  it('refuses the last size and an unknown size', () => {
+    const one: Pattern = { ...raglanTee, sizes: ['M'] }
+    expect(applyEdit(one, { kind: 'removeSize', name: 'M' })).toBe(one)
+    expect(applyEdit(raglanTee, { kind: 'removeSize', name: 'ghost' })).toBe(raglanTee)
+  })
+})
+
+describe('renameSize', () => {
+  it('renames the size and every values key, and never touches a formula', () => {
+    const next = applyEdit(raglanTee, { kind: 'renameSize', from: 'M', to: 'Medium' })
+    expect(next.sizes).toEqual(['S', 'Medium', 'L', 'XL', 'XXL'])
+    expect(next.measurements[0]?.values).toEqual({ S: 920, Medium: 1000, L: 1080, XL: 1160, XXL: 1260 })
+    expect(next.variables).toBe(raglanTee.variables)
+    expect(next.points).toBe(raglanTee.points)
+    expect(evaluate(next, 'Medium').points).toEqual(evaluate(raglanTee, 'M').points)
+  })
+
+  it('may change only the case of a name', () => {
+    expect(applyEdit(raglanTee, { kind: 'renameSize', from: 'XL', to: 'xl' }).sizes).toEqual(['S', 'M', 'L', 'xl', 'XXL'])
+  })
+
+  it.each([
+    ['a no-op', 'M', 'M'],
+    ['an unknown size', 'ghost', 'Q'],
+    ['a taken name', 'M', 'L'],
+    ['a name taken in another case', 'M', 'xl'],
+    ['__proto__', 'M', '__proto__'],
+    ['an empty name', 'M', '']
+  ])('refuses %s', (_label, from, to) => {
+    expect(applyEdit(raglanTee, { kind: 'renameSize', from, to })).toBe(raglanTee)
+  })
+})
+
+describe('checkSizeName', () => {
+  it.each(['38', '2XL', 'Petite M', 'XS/S', 'HPS'])('accepts %s', (name) => {
+    expect(checkSizeName(raglanTee, name)).toBeNull()
+  })
+
+  it('explains a taken name, and lets a size keep its own in any case', () => {
+    expect(checkSizeName(raglanTee, 'xl')).toEqual({ kind: 'taken', message: "There is already a size named 'XL'" })
+    expect(checkSizeName(raglanTee, 'xl', 'XL')).toBeNull()
+  })
+
+  it.each(['', ' M', 'M ', '__proto__', 'constructor', 'toString'])("explains why '%s' is invalid", (name) => {
+    expect(checkSizeName(raglanTee, name)?.kind).toBe('invalid')
+  })
+})
+
+describe('newSizeName', () => {
+  it('finds the smallest unused name', () => {
+    expect(newSizeName(raglanTee)).toBe('Size 1')
+    expect(newSizeName({ ...raglanTee, sizes: ['size 1', 'Size 3'] })).toBe('Size 2')
+  })
+})
+
+describe('setPiece stackPoint', () => {
+  it('sets and clears the stack point', () => {
+    const set = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: 'hps' } })
+    expect(set.pieces[0]?.stackPoint).toBe('hps')
+    const cleared = applyEdit(set, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: null } })
+    expect(Object.keys(cleared.pieces[0] ?? {})).not.toContain('stackPoint')
+    expect(applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { stackPoint: null } })).toBe(raglanTee)
   })
 })
