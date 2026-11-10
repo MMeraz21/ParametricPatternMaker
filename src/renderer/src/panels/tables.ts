@@ -10,14 +10,18 @@ import {
   type ItemKey,
   type ItemKind,
   type ItemRef,
+  type NamedItemKey,
   type Pattern,
   type PatternEdit,
-  type ResolvedPattern
+  type Piece,
+  type PiecePatch,
+  type ResolvedPattern,
+  type Segment
 } from '@core'
 import type { Selection } from '../editor/state'
 
 /**
- * The three editor panels as plain data, rendered by one EditableTable. Every per-kind decision
+ * The editor panels as plain data, rendered by one EditableTable. Every per-kind decision
  * (columns, labels, validation, which edit a cell produces) lives here, where vitest can see it.
  */
 
@@ -53,6 +57,9 @@ export interface ReadoutCell {
 export type Cell = TextCell | ReadoutCell
 
 export interface Row {
+  /** React key, unique within its table. Positional where a commit changes what identifies the row. */
+  readonly id: string
+  /** What selecting this row selects. */
   readonly key: ItemKey
   readonly name: string
   readonly selected: boolean
@@ -80,7 +87,7 @@ const issuesAbout = (resolved: ResolvedPattern, matches: (item: ItemRef) => bool
 
 const NAME_ISSUES = new Set<EvaluationIssue['kind']>(['invalid-name', 'duplicate-name', 'duplicate-id'])
 
-function nameCell(pattern: Pattern, key: ItemKey, name: string, issues: readonly EvaluationIssue[]): TextCell {
+function nameCell(pattern: Pattern, key: NamedItemKey, name: string, issues: readonly EvaluationIssue[]): TextCell {
   return {
     kind: 'text',
     columnId: 'name',
@@ -115,8 +122,8 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
     column('name', 'Name'),
     ...pattern.sizes.map((size) => column(size, size, { numeric: true, emphasis: size === pattern.activeSize }))
   ]
-  const rows = firstByName(pattern.measurements).map((measurement): Row => {
-    const key: ItemKey = { kind: 'measurement', name: measurement.name }
+  const rows = firstByName(pattern.measurements).map((measurement, index): Row => {
+    const key: NamedItemKey = { kind: 'measurement', name: measurement.name }
     const issues = issuesAbout(resolved, (item) => item.kind === 'measurement' && item.name === measurement.name)
     const valueCells = pattern.sizes.map((size): TextCell => {
       const mm = measurement.values[size]
@@ -138,6 +145,7 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
       }
     })
     return {
+      id: String(index),
       key,
       name: measurement.name,
       selected: isSelected(selection, key),
@@ -150,11 +158,12 @@ export function measurementTable(pattern: Pattern, resolved: ResolvedPattern, se
 
 export function variableTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
   const columns = [column('name', 'Name'), column('formula', 'Formula'), column('value', `Value (${UNIT_LABEL[pattern.units]})`, { numeric: true })]
-  const rows = firstByName(pattern.variables).map((variable): Row => {
-    const key: ItemKey = { kind: 'variable', name: variable.name }
+  const rows = firstByName(pattern.variables).map((variable, index): Row => {
+    const key: NamedItemKey = { kind: 'variable', name: variable.name }
     const issues = issuesAbout(resolved, (item) => item.kind === 'variable' && item.name === variable.name)
     const value = resolved.variables[variable.name]
     return {
+      id: String(index),
       key,
       name: variable.name,
       selected: isSelected(selection, key),
@@ -187,7 +196,7 @@ export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selectio
     // Rows are keyed by id; a duplicate id is reported as an issue on the first row.
     if (seen.has(point.id)) continue
     seen.add(point.id)
-    const key: ItemKey = { kind: 'point', id: point.id }
+    const key: NamedItemKey = { kind: 'point', id: point.id }
     const issues = issuesAbout(resolved, (item) => (item.kind === 'point' || item.kind === 'pointCoord') && item.id === point.id)
     const axisCell = (axis: 'x' | 'y'): TextCell => ({
       kind: 'text',
@@ -201,6 +210,7 @@ export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selectio
           : { ok: true, edit: { kind: 'setFormula', owner: { kind: 'point', id: point.id, axis }, formula: draft } }
     })
     rows.push({
+      id: point.id,
       key,
       name: point.name,
       selected: isSelected(selection, key),
@@ -211,14 +221,262 @@ export function pointTable(pattern: Pattern, resolved: ResolvedPattern, selectio
   return { kind: 'point', title: 'Points', columns, rows, add: { label: 'Add point', edit: { kind: 'add', item: newItem(pattern, 'point') } } }
 }
 
-export function tableFor(kind: ItemKind, pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+const pointLabel = (pattern: Pattern, id: string): string => pattern.points.find((point) => point.id === id)?.name ?? id
+
+/** Reads a typed point name as an id, for the cells that show points by name. */
+function commitPoint(pattern: Pattern, draft: string, current: string, edit: (id: string) => PatternEdit): CommitResult {
+  const name = draft.trim()
+  if (name === pointLabel(pattern, current)) return { ok: true, edit: null }
+  const point = pattern.points.find((candidate) => candidate.name === name)
+  return point ? { ok: true, edit: edit(point.id) } : { ok: false, message: `No point named '${name}'` }
+}
+
+function withSegmentKind(segment: Segment, kind: Segment['kind']): Segment {
+  if (kind === segment.kind) return segment
+  const { id, from, to } = segment
+  return kind === 'line' ? { id, kind, from, to } : { id, kind, from, c1: from, c2: to, to }
+}
+
+export function segmentTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+  const columns = [column('id', 'Id'), column('kind', 'Kind'), column('from', 'From'), column('c1', 'C1'), column('c2', 'C2'), column('to', 'To')]
+  const seen = new Set<string>()
+  const rows: Row[] = []
+  for (const segment of pattern.segments) {
+    if (seen.has(segment.id)) continue
+    seen.add(segment.id)
+    const key: ItemKey = { kind: 'segment', id: segment.id }
+    const issues = issuesAbout(resolved, (item) => item.kind === 'segment' && item.id === segment.id)
+    const pointCell = (columnId: string, current: string, update: (id: string) => Segment, cellIssues: readonly EvaluationIssue[] = []): TextCell => ({
+      kind: 'text',
+      columnId,
+      label: `${segment.id} ${columnId}`,
+      text: pointLabel(pattern, current),
+      issues: cellIssues,
+      commit: (draft) => commitPoint(pattern, draft, current, (id) => ({ kind: 'setSegment', segment: update(id) }))
+    })
+    const controls: readonly Cell[] =
+      segment.kind === 'bezier'
+        ? [pointCell('c1', segment.c1, (c1) => ({ ...segment, c1 })), pointCell('c2', segment.c2, (c2) => ({ ...segment, c2 }))]
+        : ['c1', 'c2'].map((columnId): Cell => ({ kind: 'readout', columnId, label: `${segment.id} ${columnId}`, text: null }))
+    rows.push({
+      id: segment.id,
+      key,
+      name: segment.id,
+      selected: isSelected(selection, key),
+      cells: [
+        { kind: 'readout', columnId: 'id', label: `${segment.id} id`, text: segment.id },
+        {
+          kind: 'text',
+          columnId: 'kind',
+          label: `${segment.id} kind`,
+          text: segment.kind,
+          issues: [],
+          commit: (draft) => {
+            const kind = draft.trim()
+            if (kind !== 'line' && kind !== 'bezier') return { ok: false, message: `A segment is 'line' or 'bezier', not '${kind}'` }
+            return { ok: true, edit: kind === segment.kind ? null : { kind: 'setSegment', segment: withSegmentKind(segment, kind) } }
+          }
+        },
+        pointCell('from', segment.from, (from) => ({ ...segment, from }), issues),
+        ...controls,
+        pointCell('to', segment.to, (to) => ({ ...segment, to }))
+      ],
+      remove: { kind: 'remove', item: key }
+    })
+  }
+  return { kind: 'segment', title: 'Segments', columns, rows, add: { label: 'Add segment', edit: { kind: 'add', item: newItem(pattern, 'segment') } } }
+}
+
+const setPiece = (piece: Piece, patch: PiecePatch): PatternEdit => ({ kind: 'setPiece', pieceId: piece.id, patch })
+
+/** A cell that replaces part of a piece. Committing the text unchanged is never an edit. */
+function pieceCell(columnId: string, label: string, text: string, issues: readonly EvaluationIssue[], commit: (draft: string) => CommitResult): TextCell {
+  return { kind: 'text', columnId, label, text, issues, commit: (draft) => (draft === text ? { ok: true, edit: null } : commit(draft)) }
+}
+
+/** Which column of the piece table an issue about the piece belongs in. */
+function pieceIssueColumn(pattern: Pattern, piece: Piece, issue: EvaluationIssue): 'grainFrom' | 'grainTo' | 'fold' | 'name' {
+  const [from, to] = piece.grainline
+  const isEnd = (id: string): boolean =>
+    (issue.kind === 'missing-point' && issue.pointId === id) || (issue.kind === 'dependency-failed' && issue.dependency === pointLabel(pattern, id))
+  if (issue.kind === 'invalid-fold-edge') return 'fold'
+  if (issue.kind === 'degenerate-grainline' || isEnd(from)) return 'grainFrom'
+  return isEnd(to) ? 'grainTo' : 'name'
+}
+
+const notAnEdge = (piece: Piece, segmentId: string): CommitResult => ({ ok: false, message: `'${segmentId}' is not an edge of ${piece.name}` })
+const hasEdge = (piece: Piece, segmentId: string): boolean => piece.outline.some((edge) => edge.segmentId === segmentId)
+
+export function pieceTable(pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): TableModel {
+  const columns = [
+    column('name', 'Name'),
+    column('allowance', 'Allowance'),
+    column('grainFrom', 'Grain from'),
+    column('grainTo', 'Grain to'),
+    column('fold', 'Fold'),
+    column('cutCount', 'Cut count', { numeric: true })
+  ]
+  const seen = new Set<string>()
+  const rows: Row[] = []
+  for (const piece of pattern.pieces) {
+    if (seen.has(piece.id)) continue
+    seen.add(piece.id)
+    const key: ItemKey = { kind: 'piece', id: piece.id }
+    const pieceIssues = issuesAbout(resolved, (item) => item.kind === 'piece' && item.id === piece.id)
+    const issuesIn = (columnId: ReturnType<typeof pieceIssueColumn>): EvaluationIssue[] => pieceIssues.filter((issue) => pieceIssueColumn(pattern, piece, issue) === columnId)
+    const [grainFrom, grainTo] = piece.grainline
+    const grainCell = (columnId: 'grainFrom' | 'grainTo', label: string, current: string, update: (id: string) => [string, string]): TextCell => ({
+      kind: 'text',
+      columnId,
+      label: `${piece.name} ${label}`,
+      text: pointLabel(pattern, current),
+      issues: issuesIn(columnId),
+      commit: (draft) => commitPoint(pattern, draft, current, (id) => setPiece(piece, { grainline: update(id) }))
+    })
+    rows.push({
+      id: piece.id,
+      key,
+      name: piece.name,
+      selected: isSelected(selection, key),
+      cells: [
+        pieceCell('name', `${piece.name} name`, piece.name, issuesIn('name'), (draft) => ({ ok: true, edit: setPiece(piece, { name: draft }) })),
+        pieceCell(
+          'allowance',
+          `${piece.name} allowance`,
+          piece.seamAllowance.default,
+          issuesAbout(resolved, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === null),
+          (draft) => ({ ok: true, edit: setPiece(piece, { seamAllowance: { ...piece.seamAllowance, default: draft } }) })
+        ),
+        grainCell('grainFrom', 'grain from', grainFrom, (id) => [id, grainTo]),
+        grainCell('grainTo', 'grain to', grainTo, (id) => [grainFrom, id]),
+        pieceCell('fold', `${piece.name} fold`, piece.fold ?? '', issuesIn('fold'), (draft) => {
+          const segmentId = draft.trim()
+          if (segmentId === '') return { ok: true, edit: setPiece(piece, { fold: null }) }
+          return hasEdge(piece, segmentId) ? { ok: true, edit: setPiece(piece, { fold: segmentId }) } : notAnEdge(piece, segmentId)
+        }),
+        pieceCell('cutCount', `${piece.name} cut count`, String(piece.cutCount), [], (draft) => {
+          const cutCount = Number(draft.trim())
+          if (draft.trim() === '' || !Number.isInteger(cutCount) || cutCount < 1) return { ok: false, message: 'Cut count must be a whole number of 1 or more' }
+          return { ok: true, edit: setPiece(piece, { cutCount }) }
+        })
+      ],
+      remove: { kind: 'remove', item: key }
+    })
+  }
+  return { kind: 'piece', title: 'Pieces', columns, rows, add: { label: 'Add piece', edit: { kind: 'add', item: newItem(pattern, 'piece') } } }
+}
+
+/** The piece's allowance with the override on `from` moved to `to`, or dropped when `to` is absent. */
+function moveOverride(piece: Piece, from: string, to?: string): Piece['seamAllowance'] {
+  const { default: width, perEdge = {} } = piece.seamAllowance
+  const entries = Object.entries(perEdge).flatMap(([id, formula]): [string, string][] => {
+    if (id !== from) return [[id, formula]]
+    return to === undefined ? [] : [[to, formula]]
+  })
+  return entries.length > 0 ? { default: width, perEdge: Object.fromEntries(entries) } : { default: width }
+}
+
+export function edgeTable(pattern: Pattern, resolved: ResolvedPattern, piece: Piece): TableModel {
+  const columns = [column('segment', 'Segment'), column('reversed', 'Reversed'), column('allowance', 'Allowance'), column('length', `Length (${UNIT_LABEL[pattern.units]})`, { numeric: true })]
+  const key: ItemKey = { kind: 'piece', id: piece.id }
+  const perEdge = piece.seamAllowance.perEdge ?? {}
+  const rows = piece.outline.map((edge, index): Row => {
+    const { segmentId } = edge
+    const hasOverride = Object.hasOwn(perEdge, segmentId)
+    const setOutline = (next: Piece['outline'][number]): Piece['outline'] => piece.outline.with(index, next)
+    const length = resolved.segments[segmentId]?.length
+    return {
+      id: String(index),
+      key,
+      name: segmentId,
+      selected: false,
+      cells: [
+        pieceCell('segment', `${segmentId} segment`, segmentId, [], (draft) => {
+          const to = draft.trim()
+          if (!pattern.segments.some((segment) => segment.id === to)) return { ok: false, message: `No segment with id '${to}'` }
+          const outline = setOutline({ ...edge, segmentId: to })
+          // An override keeps following its edge. Left behind, it would have no row to clear it from.
+          return { ok: true, edit: setPiece(piece, hasOverride ? { outline, seamAllowance: moveOverride(piece, segmentId, to) } : { outline }) }
+        }),
+        pieceCell('reversed', `${segmentId} reversed`, edge.reversed ? 'yes' : 'no', [], (draft) => {
+          const answer = draft.trim()
+          if (answer !== 'yes' && answer !== 'no') return { ok: false, message: "Reversed is 'yes' or 'no'" }
+          if ((answer === 'yes') === (edge.reversed ?? false)) return { ok: true, edit: null }
+          return { ok: true, edit: setPiece(piece, { outline: setOutline({ ...edge, reversed: answer === 'yes' }) }) }
+        }),
+        pieceCell(
+          'allowance',
+          `${segmentId} allowance`,
+          perEdge[segmentId] ?? '',
+          issuesAbout(resolved, (item) => item.kind === 'seamAllowance' && item.pieceId === piece.id && item.segmentId === segmentId),
+          (draft) => {
+            const seamAllowance = draft.trim() === '' ? moveOverride(piece, segmentId) : { ...piece.seamAllowance, perEdge: { ...perEdge, [segmentId]: draft } }
+            return { ok: true, edit: setPiece(piece, { seamAllowance }) }
+          }
+        ),
+        { kind: 'readout', columnId: 'length', label: `${segmentId} length`, text: length === undefined ? null : formatLength(length, pattern.units) }
+      ],
+      remove: setPiece(piece, hasOverride ? { outline: piece.outline.toSpliced(index, 1), seamAllowance: moveOverride(piece, segmentId) } : { outline: piece.outline.toSpliced(index, 1) })
+    }
+  })
+  const unused = pattern.segments.find((segment) => !hasEdge(piece, segment.id)) ?? pattern.segments[0]
+  return {
+    kind: 'piece',
+    title: `Edges of ${piece.name}`,
+    columns,
+    rows,
+    add: { label: 'Add edge', edit: setPiece(piece, { outline: [...piece.outline, { segmentId: unused?.id ?? 'segment' }] }) }
+  }
+}
+
+export function notchTable(pattern: Pattern, resolved: ResolvedPattern, piece: Piece): TableModel {
+  const columns = [column('segment', 'Segment'), column('distance', 'Distance')]
+  const key: ItemKey = { kind: 'piece', id: piece.id }
+  const rows = piece.notches.map((notch, index): Row => {
+    const setNotch = (next: Piece['notches'][number]): PatternEdit => setPiece(piece, { notches: piece.notches.with(index, next) })
+    return {
+      id: String(index),
+      key,
+      name: notch.id,
+      selected: false,
+      cells: [
+        pieceCell('segment', `${notch.id} segment`, notch.segmentId, [], (draft) => {
+          const segmentId = draft.trim()
+          return hasEdge(piece, segmentId) ? { ok: true, edit: setNotch({ ...notch, segmentId }) } : notAnEdge(piece, segmentId)
+        }),
+        pieceCell(
+          'distance',
+          `${notch.id} distance`,
+          notch.distance,
+          issuesAbout(resolved, (item) => item.kind === 'notch' && item.pieceId === piece.id && item.id === notch.id),
+          (draft) => ({ ok: true, edit: setNotch({ ...notch, distance: draft }) })
+        )
+      ],
+      remove: setPiece(piece, { notches: piece.notches.toSpliced(index, 1) })
+    }
+  })
+  let n = 1
+  while (piece.notches.some((notch) => notch.id === `n${n}`)) n++
+  const add = setPiece(piece, { notches: [...piece.notches, { id: `n${n}`, segmentId: piece.outline[0]?.segmentId ?? '', distance: '0' }] })
+  return { kind: 'piece', title: `Notches of ${piece.name}`, columns, rows, add: { label: 'Add notch', edit: add } }
+}
+
+/** The tables a tab shows. The Pieces tab grows the selected piece's edges and notches. */
+export function tablesFor(kind: ItemKind, pattern: Pattern, resolved: ResolvedPattern, selection: Selection | null): readonly TableModel[] {
   switch (kind) {
     case 'measurement':
-      return measurementTable(pattern, resolved, selection)
+      return [measurementTable(pattern, resolved, selection)]
     case 'variable':
-      return variableTable(pattern, resolved, selection)
+      return [variableTable(pattern, resolved, selection)]
     case 'point':
-      return pointTable(pattern, resolved, selection)
+      return [pointTable(pattern, resolved, selection)]
+    case 'segment':
+      return [segmentTable(pattern, resolved, selection)]
+    case 'piece': {
+      const piece = selection?.kind === 'piece' ? pattern.pieces.find((candidate) => candidate.id === selection.id) : undefined
+      const pieces = pieceTable(pattern, resolved, selection)
+      return piece ? [pieces, edgeTable(pattern, resolved, piece), notchTable(pattern, resolved, piece)] : [pieces]
+    }
     default: {
       const _exhaustive: never = kind
       return _exhaustive

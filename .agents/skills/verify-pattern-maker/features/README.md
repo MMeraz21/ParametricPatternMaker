@@ -48,6 +48,8 @@ commands and observable proof.
   its formulas in the inspector, including fixing a broken point from the issues panel.
 - [Editor panels](./editor-panels.md) covers the measurement table, variables and points tabs:
   editing, renaming, adding, deleting, and jumping to rows from the canvas and issues list.
+- [Pieces](./pieces.md) covers cut lines, grainlines, folds and notch marks on the canvas, and editing
+  allowances, edges, notches and segments in the Pieces and Segments tabs.
 
 ## Not yet built
 

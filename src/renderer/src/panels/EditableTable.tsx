@@ -8,7 +8,7 @@ interface EditableTableProps {
   onSelect: (key: ItemKey) => void
 }
 
-/** Renders any TableModel. Knows nothing about measurements, variables or points. */
+/** Renders any TableModel. Knows nothing about what its rows are. */
 export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
   return (
     <div className="flex h-full flex-col">
@@ -31,11 +31,9 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row, index) => (
+            {table.rows.map((row) => (
               <tr
-                // Points have stable ids. Measurements and variables are keyed by name, which a rename
-                // changes; keying them by position keeps the row (and the cell Tab is moving to) mounted.
-                key={row.key.kind === 'point' ? row.key.id : index}
+                key={row.id}
                 aria-selected={row.selected}
                 onFocus={() => onSelect(row.key)}
                 onClick={() => onSelect(row.key)}
@@ -82,6 +80,10 @@ export function EditableTable({ table, onEdit, onSelect }: EditableTableProps) {
   )
 }
 
+const MIN_INPUT_CHARS = 4
+/** Room for the input's own padding and border. */
+const INPUT_PADDING_CHARS = 2
+
 interface EditableCellProps {
   cell: TextCell
   numeric: boolean
@@ -116,6 +118,8 @@ function EditableCell({ cell, numeric, onEdit }: EditableCellProps) {
         aria-invalid={problems.length > 0}
         title={problems.join('\n') || undefined}
         spellCheck={false}
+        // Never narrower than its text: a long name is readable, and a tight table scrolls sideways instead.
+        style={{ minWidth: `${Math.max(cell.text.length, MIN_INPUT_CHARS) + INPUT_PADDING_CHARS}ch` }}
         value={draft ?? cell.text}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}

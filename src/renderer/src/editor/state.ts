@@ -57,12 +57,14 @@ function selectionAfter(selection: Selection | null, edit: PatternEdit): Selecti
       return keyOf(edit.item)
     case 'rename':
       if (!selection || !sameItem(selection, edit.item)) return selection
-      return selection.kind === 'point' ? selection : { kind: selection.kind, name: edit.to }
+      return edit.item.kind === 'point' ? selection : { kind: edit.item.kind, name: edit.to }
     case 'remove':
       return selection && sameItem(selection, edit.item) ? null : selection
     case 'setFormula':
     case 'setMeasurement':
     case 'setUnits':
+    case 'setSegment':
+    case 'setPiece':
       return selection
     default: {
       const _exhaustive: never = edit

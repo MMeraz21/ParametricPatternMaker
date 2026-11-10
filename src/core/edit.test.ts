@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { applyEdit, checkName, keyOf, newItem } from './edit'
+import { applyEdit, checkName, keyOf, newItem, sameItem, type PatternEdit, type PiecePatch } from './edit'
 import { evaluate } from './evaluate'
 import { raglanTee } from './fixtures/raglan'
-import type { Pattern } from './model'
+import type { Pattern, Piece } from './model'
 
 const hpsX = (formula: string) => ({ kind: 'setFormula', owner: { kind: 'point', id: 'hps', axis: 'x' }, formula }) as const
 
@@ -105,6 +105,137 @@ describe('rename', () => {
     expect(applyEdit(raglanTee, { kind: 'rename', item: neck, to: '2neck' })).toBe(raglanTee)
     expect(applyEdit(raglanTee, { kind: 'rename', item: neck, to: 'HPS' })).toBe(raglanTee)
     expect(applyEdit(raglanTee, { kind: 'rename', item: neck, to: 'neck' })).toBe(raglanTee)
+  })
+})
+
+describe('segments and pieces', () => {
+  const segment = { id: 'extra', kind: 'line', from: 'hps', to: 'cfHem' } as const
+  const front = raglanTee.pieces[0]
+  if (!front) throw new Error('raglan has a front')
+  const piece = { ...front, id: 'extraPiece', name: 'Extra' }
+
+  describe('add and remove', () => {
+    it('adds a segment and a piece', () => {
+      const next = applyEdit(applyEdit(raglanTee, { kind: 'add', item: { kind: 'segment', segment } }), { kind: 'add', item: { kind: 'piece', piece } })
+      expect(next.segments.at(-1)).toEqual(segment)
+      expect(next.pieces.at(-1)).toEqual(piece)
+      expect(keyOf({ kind: 'segment', segment })).toEqual({ kind: 'segment', id: 'extra' })
+      expect(keyOf({ kind: 'piece', piece })).toEqual({ kind: 'piece', id: 'extraPiece' })
+    })
+
+    it('refuses an id already in use', () => {
+      expect(applyEdit(raglanTee, { kind: 'add', item: { kind: 'segment', segment: { ...segment, id: 'frontCf' } } })).toBe(raglanTee)
+      expect(applyEdit(raglanTee, { kind: 'add', item: { kind: 'piece', piece: { ...piece, id: 'front' } } })).toBe(raglanTee)
+    })
+
+    it('removes without cascading, leaving issues for what used it', () => {
+      const next = applyEdit(raglanTee, { kind: 'remove', item: { kind: 'segment', id: 'frontCf' } })
+      expect(next.segments.map((s) => s.id)).not.toContain('frontCf')
+      expect(next.pieces).toBe(raglanTee.pieces)
+      expect(evaluate(next, 'M').issues[0]).toMatchObject({ kind: 'missing-segment', segmentId: 'frontCf' })
+      expect(applyEdit(raglanTee, { kind: 'remove', item: { kind: 'piece', id: 'front' } }).pieces.map((p) => p.id)).toEqual(['back', 'sleeve', 'neckband'])
+    })
+
+    it('returns the same pattern when removing an unknown id', () => {
+      expect(applyEdit(raglanTee, { kind: 'remove', item: { kind: 'segment', id: 'ghost' } })).toBe(raglanTee)
+      expect(applyEdit(raglanTee, { kind: 'remove', item: { kind: 'piece', id: 'ghost' } })).toBe(raglanTee)
+    })
+
+    it('makes new items with fresh ids that resolve to something usable', () => {
+      const newSegment = newItem(raglanTee, 'segment')
+      expect(newSegment).toEqual({ kind: 'segment', segment: { id: 's1', kind: 'line', from: 'hps', to: 'cfNeck' } })
+      expect(newItem(applyEdit(raglanTee, { kind: 'add', item: newSegment }), 'segment')).toMatchObject({ segment: { id: 's2' } })
+      expect(newItem(raglanTee, 'piece')).toEqual({
+        kind: 'piece',
+        piece: { id: 'piece1', name: 'Piece 1', outline: [], seamAllowance: { default: '10' }, notches: [], grainline: ['hps', 'cfNeck'], cutCount: 1 }
+      })
+    })
+  })
+
+  it('tells items of different kinds apart', () => {
+    expect(sameItem({ kind: 'segment', id: 'a' }, { kind: 'segment', id: 'a' })).toBe(true)
+    expect(sameItem({ kind: 'segment', id: 'a' }, { kind: 'piece', id: 'a' })).toBe(false)
+    expect(sameItem({ kind: 'segment', id: 'a' }, { kind: 'segment', id: 'b' })).toBe(false)
+    expect(sameItem({ kind: 'point', id: 'a' }, { kind: 'variable', name: 'a' })).toBe(false)
+    expect(sameItem({ kind: 'variable', name: 'a' }, { kind: 'variable', name: 'a' })).toBe(true)
+  })
+
+  it('renames only named items', () => {
+    // @ts-expect-error segments have ids, not names. Typecheck is what proves this one.
+    const edit: PatternEdit = { kind: 'rename', item: { kind: 'segment', id: 'frontCf' }, to: 'x' }
+    expect(edit.kind).toBe('rename')
+  })
+
+  describe('setSegment', () => {
+    it('replaces a segment by id and shares everything else', () => {
+      const changed = { id: 'frontCf', kind: 'line', from: 'cfNeck', to: 'sideHem' } as const
+      const next = applyEdit(raglanTee, { kind: 'setSegment', segment: changed })
+      expect(next.segments.find((s) => s.id === 'frontCf')).toEqual(changed)
+      expect(next.points).toBe(raglanTee.points)
+      expect(next.pieces).toBe(raglanTee.pieces)
+    })
+
+    it('can change a segment kind', () => {
+      const curved = { id: 'frontCf', kind: 'bezier', from: 'cfNeck', c1: 'cfNeck', c2: 'cfHem', to: 'cfHem' } as const
+      expect(applyEdit(raglanTee, { kind: 'setSegment', segment: curved }).segments.find((s) => s.id === 'frontCf')).toEqual(curved)
+    })
+
+    it('refuses an unknown id and returns the same pattern for no change', () => {
+      expect(applyEdit(raglanTee, { kind: 'setSegment', segment: { ...segment, id: 'ghost' } })).toBe(raglanTee)
+      const [first] = raglanTee.segments
+      if (!first) throw new Error('raglan has segments')
+      expect(applyEdit(raglanTee, { kind: 'setSegment', segment: { ...first } })).toBe(raglanTee)
+    })
+  })
+
+  describe('setPiece', () => {
+    const setFront = (patch: PiecePatch): Pattern => applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch })
+    const nextFront = (patch: PiecePatch): Piece | undefined => setFront(patch).pieces[0]
+
+    it('changes only the patched fields and shares the other pieces', () => {
+      const next = setFront({ name: 'Bodice', cutCount: 2 })
+      expect(next.pieces[0]).toEqual({ ...front, name: 'Bodice', cutCount: 2 })
+      expect(next.pieces[1]).toBe(raglanTee.pieces[1])
+    })
+
+    it('replaces the seam allowance as a whole', () => {
+      expect(nextFront({ seamAllowance: { default: 'seam' } })?.seamAllowance).toEqual({ default: 'seam' })
+    })
+
+    it('returns the same pattern when every patched field is unchanged', () => {
+      expect(setFront({ name: front.name, seamAllowance: { ...front.seamAllowance }, outline: [...front.outline] })).toBe(raglanTee)
+      expect(setFront({ fold: 'frontCf' })).toBe(raglanTee)
+    })
+
+    it('refuses an unknown piece', () => {
+      expect(applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'ghost', patch: { name: 'x' } })).toBe(raglanTee)
+    })
+
+    it.each([0, -1, 1.5, Number.NaN])('refuses a cut count of %d', (cutCount) => {
+      expect(setFront({ cutCount })).toBe(raglanTee)
+    })
+
+    it('clears the fold with null', () => {
+      const cleared = nextFront({ fold: null })
+      expect(cleared).toBeDefined()
+      expect(cleared && 'fold' in cleared).toBe(false)
+    })
+
+    it('deletes the override on an edge that becomes the fold', () => {
+      expect(nextFront({ fold: 'frontHem' })?.seamAllowance).toEqual({ default: '10' })
+      expect(nextFront({ fold: 'frontHem' })?.fold).toBe('frontHem')
+    })
+
+    it('keeps other overrides when an edge becomes the fold', () => {
+      const pattern = applyEdit(raglanTee, { kind: 'setPiece', pieceId: 'front', patch: { seamAllowance: { default: '10', perEdge: { frontHem: '25', frontSide: '5' } } } })
+      const next = applyEdit(pattern, { kind: 'setPiece', pieceId: 'front', patch: { fold: 'frontSide' } })
+      expect(next.pieces[0]?.seamAllowance).toEqual({ default: '10', perEdge: { frontHem: '25' } })
+    })
+
+    it('gives the same result when replayed', () => {
+      const edit = { kind: 'setPiece', pieceId: 'front', patch: { fold: 'frontHem', cutCount: 3 } } as const
+      expect(applyEdit(raglanTee, edit)).toEqual(applyEdit(raglanTee, edit))
+    })
   })
 })
 

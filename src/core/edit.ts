@@ -1,5 +1,5 @@
 import { isValidName, renameReferences, type Axis } from './formula'
-import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Point, type SizeName, type Variable } from './model'
+import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type Pattern, type Piece, type Point, type Segment, type SizeName, type Variable } from './model'
 
 /**
  * Pattern edits: the one way anything changes a Pattern (panels, inspector, undo and MCP later).
@@ -7,15 +7,17 @@ import { visitPieceFormulas, type DisplayUnits, type Id, type Measurement, type 
  * `applyEdit` never mutates its input and shares everything it doesn't touch. A no-op or refused edit
  * returns the same reference, so `next === pattern` means "nothing changed". Bad formula text is a legal
  * edit (evaluate reports it); what is refused is anything that would lose information: an invalid or
- * taken name, a duplicate id, a non-finite measurement. Edits carry every choice (ids, names), so
+ * taken name, a duplicate id, a non-finite measurement, a cut count that isn't a positive whole number. Edits carry every choice (ids, names), so
  * replaying one against the same pattern gives the same result.
  */
 
-/** Identity of a named item. Measurements and variables have no id, so their name is their key. */
-export type ItemKey =
+/** Identity of an item with a name formulas can use. Measurements and variables have no id, so their name is their key. */
+export type NamedItemKey =
   | { readonly kind: 'measurement'; readonly name: string }
   | { readonly kind: 'variable'; readonly name: string }
   | { readonly kind: 'point'; readonly id: Id }
+
+export type ItemKey = NamedItemKey | { readonly kind: 'segment'; readonly id: Id } | { readonly kind: 'piece'; readonly id: Id }
 
 export type ItemKind = ItemKey['kind']
 
@@ -24,6 +26,11 @@ export type NewItem =
   | { readonly kind: 'measurement'; readonly measurement: Measurement }
   | { readonly kind: 'variable'; readonly variable: Variable }
   | { readonly kind: 'point'; readonly point: Point }
+  | { readonly kind: 'segment'; readonly segment: Segment }
+  | { readonly kind: 'piece'; readonly piece: Piece }
+
+/** A piece's fields to replace. A `fold` of null clears it; setting one deletes that edge's override. */
+export type PiecePatch = Partial<Pick<Piece, 'name' | 'outline' | 'seamAllowance' | 'notches' | 'grainline' | 'cutCount'>> & { readonly fold?: Id | null }
 
 export type FormulaOwner =
   | { readonly kind: 'variable'; readonly name: string }
@@ -34,19 +41,23 @@ export type PatternEdit =
   /** Doesn't cascade: references to the item become issues that evaluate reports. */
   | { readonly kind: 'remove'; readonly item: ItemKey }
   /** Renames the item and rewrites every formula that refers to it, keeping the user's text. */
-  | { readonly kind: 'rename'; readonly item: ItemKey; readonly to: string }
+  | { readonly kind: 'rename'; readonly item: NamedItemKey; readonly to: string }
   | { readonly kind: 'setFormula'; readonly owner: FormulaOwner; readonly formula: string }
   | { readonly kind: 'setMeasurement'; readonly name: string; readonly size: SizeName; readonly value: number }
   | { readonly kind: 'setUnits'; readonly units: DisplayUnits }
+  /** Replaces the segment with this id. Refused if there isn't one. */
+  | { readonly kind: 'setSegment'; readonly segment: Segment }
+  | { readonly kind: 'setPiece'; readonly pieceId: Id; readonly patch: PiecePatch }
 
 /** Why a name can't be used. Messages are ready to show. */
 export type NameProblem = { readonly kind: 'invalid' | 'taken'; readonly message: string }
 
-export const sameItem = (a: ItemKey, b: ItemKey): boolean =>
-  a.kind === b.kind && (a.kind === 'point' ? b.kind === 'point' && a.id === b.id : b.kind !== 'point' && a.name === b.name)
+const identity = (key: ItemKey): string => ('name' in key ? key.name : key.id)
+
+export const sameItem = (a: ItemKey, b: ItemKey): boolean => a.kind === b.kind && identity(a) === identity(b)
 
 /** Measurements, variables and points share one namespace. */
-function nameOwner(pattern: Pattern, name: string): ItemKey | undefined {
+function nameOwner(pattern: Pattern, name: string): NamedItemKey | undefined {
   if (pattern.measurements.some((m) => m.name === name)) return { kind: 'measurement', name }
   if (pattern.variables.some((v) => v.name === name)) return { kind: 'variable', name }
   const point = pattern.points.find((p) => p.name === name)
@@ -69,27 +80,40 @@ export function checkName(pattern: Pattern, name: string, except?: ItemKey): Nam
   return null
 }
 
-const BLANK_NAMES: Record<ItemKind, string> = { measurement: 'measurement', variable: 'variable', point: 'P' }
-
-/**
- * A new item with a unique name (`variable_1`, `P_2`, ...) and, for points, a fresh id `p<N>`.
- * Deterministic, so the caller knows the id before dispatching and can select the new row.
- */
-export function newItem(pattern: Pattern, kind: ItemKind): NewItem {
-  const base = BLANK_NAMES[kind]
+function uniqueName(pattern: Pattern, base: string): string {
   let n = 1
   while (nameOwner(pattern, `${base}_${n}`)) n++
-  const name = `${base}_${n}`
+  return `${base}_${n}`
+}
+
+/** The smallest `<prefix><N>` not in `taken`. */
+function freshId(prefix: string, taken: readonly { id: Id }[]): { id: Id; n: number } {
+  const ids = new Set(taken.map((item) => item.id))
+  let n = 1
+  while (ids.has(`${prefix}${n}`)) n++
+  return { id: `${prefix}${n}`, n }
+}
+
+/**
+ * A new item with a unique name (`variable_1`, `P_2`, ...) or a fresh id (`p<N>`, `s<N>`, `piece<N>`).
+ * Deterministic, so the caller knows its key before dispatching and can select the new row.
+ */
+export function newItem(pattern: Pattern, kind: ItemKind): NewItem {
+  // New segments and grainlines start on the first two points, ready to be retyped.
+  const firstPoint = pattern.points[0]?.id ?? 'p1'
+  const secondPoint = pattern.points[1]?.id ?? firstPoint
   switch (kind) {
     case 'measurement':
-      return { kind, measurement: { name, values: Object.fromEntries(pattern.sizes.map((size) => [size, 0])) } }
+      return { kind, measurement: { name: uniqueName(pattern, 'measurement'), values: Object.fromEntries(pattern.sizes.map((size) => [size, 0])) } }
     case 'variable':
-      return { kind, variable: { name, formula: '0' } }
-    case 'point': {
-      const ids = new Set(pattern.points.map((p) => p.id))
-      let k = 1
-      while (ids.has(`p${k}`)) k++
-      return { kind, point: { id: `p${k}`, name, x: '0', y: '0' } }
+      return { kind, variable: { name: uniqueName(pattern, 'variable'), formula: '0' } }
+    case 'point':
+      return { kind, point: { id: freshId('p', pattern.points).id, name: uniqueName(pattern, 'P'), x: '0', y: '0' } }
+    case 'segment':
+      return { kind, segment: { id: freshId('s', pattern.segments).id, kind: 'line', from: firstPoint, to: secondPoint } }
+    case 'piece': {
+      const { id, n } = freshId('piece', pattern.pieces)
+      return { kind, piece: { id, name: `Piece ${n}`, outline: [], seamAllowance: { default: '10' }, notches: [], grainline: [firstPoint, secondPoint], cutCount: 1 } }
     }
     default: {
       const _exhaustive: never = kind
@@ -107,6 +131,10 @@ export function keyOf(item: NewItem): ItemKey {
       return { kind: 'variable', name: item.variable.name }
     case 'point':
       return { kind: 'point', id: item.point.id }
+    case 'segment':
+      return { kind: 'segment', id: item.segment.id }
+    case 'piece':
+      return { kind: 'piece', id: item.piece.id }
     default: {
       const _exhaustive: never = item
       return _exhaustive
@@ -144,11 +172,49 @@ export function applyEdit(pattern: Pattern, edit: PatternEdit): Pattern {
     }
     case 'setUnits':
       return pattern.units === edit.units ? pattern : { ...pattern, units: edit.units }
+    case 'setSegment': {
+      const segments = replaceFirst(
+        pattern.segments,
+        (s) => s.id === edit.segment.id,
+        (s) => (unchanged(s, edit.segment) ? s : edit.segment)
+      )
+      return segments ? { ...pattern, segments } : pattern
+    }
+    case 'setPiece': {
+      const { cutCount } = edit.patch
+      if (cutCount !== undefined && !(Number.isInteger(cutCount) && cutCount > 0)) return pattern
+      const pieces = replaceFirst(
+        pattern.pieces,
+        (p) => p.id === edit.pieceId,
+        (p) => patchPiece(p, edit.patch)
+      )
+      return pieces ? { ...pattern, pieces } : pattern
+    }
     default: {
       const _exhaustive: never = edit
       return _exhaustive
     }
   }
+}
+
+const unchanged = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+
+function withoutOverride(piece: Piece, segmentId: Id): Piece {
+  const { default: width, perEdge = {} } = piece.seamAllowance
+  const others = Object.entries(perEdge).filter(([id]) => id !== segmentId)
+  return { ...piece, seamAllowance: others.length > 0 ? { default: width, perEdge: Object.fromEntries(others) } : { default: width } }
+}
+
+function patchPiece(piece: Piece, { fold, ...fields }: PiecePatch): Piece {
+  const patched: Piece = { ...piece, ...fields }
+  let next = patched
+  if (fold === null) {
+    const { fold: _cleared, ...rest } = patched
+    next = rest
+  } else if (fold !== undefined) {
+    next = { ...withoutOverride(patched, fold), fold }
+  }
+  return unchanged(next, piece) ? piece : next
 }
 
 function add(pattern: Pattern, item: NewItem): Pattern {
@@ -166,6 +232,10 @@ function add(pattern: Pattern, item: NewItem): Pattern {
       if (checkName(pattern, point.name) || pattern.points.some((p) => p.id === point.id)) return pattern
       return { ...pattern, points: [...pattern.points, point] }
     }
+    case 'segment':
+      return pattern.segments.some((s) => s.id === item.segment.id) ? pattern : { ...pattern, segments: [...pattern.segments, item.segment] }
+    case 'piece':
+      return pattern.pieces.some((p) => p.id === item.piece.id) ? pattern : { ...pattern, pieces: [...pattern.pieces, item.piece] }
     default: {
       const _exhaustive: never = item
       return _exhaustive
@@ -187,6 +257,14 @@ function remove(pattern: Pattern, item: ItemKey): Pattern {
       const index = pattern.points.findIndex((p) => p.id === item.id)
       return index === -1 ? pattern : { ...pattern, points: pattern.points.toSpliced(index, 1) }
     }
+    case 'segment': {
+      const index = pattern.segments.findIndex((s) => s.id === item.id)
+      return index === -1 ? pattern : { ...pattern, segments: pattern.segments.toSpliced(index, 1) }
+    }
+    case 'piece': {
+      const index = pattern.pieces.findIndex((p) => p.id === item.id)
+      return index === -1 ? pattern : { ...pattern, pieces: pattern.pieces.toSpliced(index, 1) }
+    }
     default: {
       const _exhaustive: never = item
       return _exhaustive
@@ -194,7 +272,7 @@ function remove(pattern: Pattern, item: ItemKey): Pattern {
   }
 }
 
-function currentName(pattern: Pattern, item: ItemKey): string | undefined {
+function currentName(pattern: Pattern, item: NamedItemKey): string | undefined {
   switch (item.kind) {
     case 'measurement':
       return pattern.measurements.find((m) => m.name === item.name)?.name
@@ -209,7 +287,7 @@ function currentName(pattern: Pattern, item: ItemKey): string | undefined {
   }
 }
 
-function rename(pattern: Pattern, item: ItemKey, to: string): Pattern {
+function rename(pattern: Pattern, item: NamedItemKey, to: string): Pattern {
   const from = currentName(pattern, item)
   if (from === undefined || from === to || checkName(pattern, to, item)) return pattern
 

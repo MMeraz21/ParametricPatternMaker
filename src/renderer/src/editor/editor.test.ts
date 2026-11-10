@@ -47,6 +47,30 @@ describe('editorReducer', () => {
   })
 })
 
+describe('editorReducer with segments and pieces', () => {
+  const initial = initEditorState(raglanTee)
+
+  it('opens the tab of a selected segment or piece', () => {
+    expect(editorReducer(initial, { type: 'select', selection: { kind: 'segment', id: 'frontCf' } }).panel).toBe('segment')
+    expect(editorReducer(initial, { type: 'select', selection: { kind: 'piece', id: 'front' } }).panel).toBe('piece')
+  })
+
+  it('selects an added piece, keeps it through edits and clears it on remove', () => {
+    const piece = { id: 'x', name: 'X', outline: [], seamAllowance: { default: '10' }, notches: [], grainline: ['hps', 'cfNeck'] as [string, string], cutCount: 1 }
+    const added = editorReducer(initial, { type: 'edit', edit: { kind: 'add', item: { kind: 'piece', piece } } })
+    expect(added.selection).toEqual({ kind: 'piece', id: 'x' })
+    const renamed = editorReducer(added, { type: 'edit', edit: { kind: 'setPiece', pieceId: 'x', patch: { name: 'Y' } } })
+    expect(renamed.selection).toEqual({ kind: 'piece', id: 'x' })
+    expect(editorReducer(renamed, { type: 'edit', edit: { kind: 'remove', item: { kind: 'piece', id: 'x' } } }).selection).toBeNull()
+  })
+
+  it('keeps the selection when a segment is edited', () => {
+    const selected = editorReducer(initial, { type: 'select', selection: { kind: 'segment', id: 'frontCf' } })
+    const edited = editorReducer(selected, { type: 'edit', edit: { kind: 'setSegment', segment: { id: 'frontCf', kind: 'line', from: 'hps', to: 'cfHem' } } })
+    expect(edited.selection).toEqual({ kind: 'segment', id: 'frontCf' })
+  })
+})
+
 describe('pointRoles', () => {
   it('marks bezier controls as controls and every endpoint as an anchor', () => {
     const roles = pointRoles(raglanTee)
@@ -93,5 +117,15 @@ describe('selectionForIssue', () => {
     expect(selectionForIssue(first)).toEqual({ kind: 'point', id: 'hps' })
     expect(selectionForIssue({ kind: 'unknown-size', size: 'Q', message: '' })).toBeNull()
     expect(selectionForIssue({ kind: 'not-finite', item: { kind: 'variable', name: 'v' }, message: '' })).toEqual({ kind: 'variable', name: 'v' })
+  })
+
+  it.each([
+    [{ kind: 'piece', id: 'p', name: 'P' }, { kind: 'piece', id: 'p' }],
+    [{ kind: 'notch', pieceId: 'p', id: 'n' }, { kind: 'piece', id: 'p' }],
+    [{ kind: 'seamAllowance', pieceId: 'p', segmentId: 's' }, { kind: 'piece', id: 'p' }],
+    [{ kind: 'seamAllowance', pieceId: 'p', segmentId: null }, { kind: 'piece', id: 'p' }],
+    [{ kind: 'segment', id: 's' }, { kind: 'segment', id: 's' }]
+  ] as const)('takes an issue on %o to its tab', (item, selection) => {
+    expect(selectionForIssue({ kind: 'not-finite', item, message: '' })).toEqual(selection)
   })
 })

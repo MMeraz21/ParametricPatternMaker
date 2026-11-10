@@ -1,7 +1,8 @@
 # Editor panels
 
-A dock under the canvas has three tabs: Measurements (a table with one column per size), Variables
-(name, formula, value) and Points (name, x and y formulas). Every cell edits in place. Enter or
+A dock under the canvas has five tabs: Measurements (a table with one column per size), Variables
+(name, formula, value), Points (name, x and y formulas), and Segments and Pieces, which `pieces.md`
+covers. Every cell edits in place. Enter or
 clicking away commits, Escape reverts, and a rejected value shows why. Committed edits redraw the
 canvas straight away. Renaming an item rewrites every formula that uses it. Deleting an item that
 others use leaves issues that point at the dependents. Rows can be added and deleted, and selecting
@@ -9,7 +10,7 @@ a point on the canvas jumps to its row.
 
 ## Sub-features
 
-- `panels-tabs` shows the Measurements, Variables and Points tabs, Measurements first, with a column per size and the active size highlighted.
+- `panels-tabs` shows the Measurements, Variables, Points, Segments and Pieces tabs, Measurements first, with a column per size and the active size highlighted.
 - `panels-measure` commits a measurement value and redraws; rejects non-numbers with a message; Escape reverts.
 - `panels-variable` commits a variable formula (units like `12cm` allowed) and updates computed values.
 - `panels-units` switches the header `Units` between cm and inches; tables, values and typed measurements follow.
@@ -23,7 +24,7 @@ a point on the canvas jumps to its row.
 ## How to get to it (user POV)
 
 - The header has a `Units` select (cm or inches).
-- Launch the app. The dock sits under the canvas, with tabs `Measurements`, `Variables` and `Points`.
+- Launch the app. The dock sits under the canvas, with tabs `Measurements`, `Variables`, `Points`, `Segments` and `Pieces`.
 - Cells are text fields named `<row> <column>`, for example `chest M`, `neck name`, `body_width formula`, `HPS x`.
 - Each row has a `Delete <name>` button. Below each table is a `+ Add measurement` / `+ Add variable` / `+ Add point` button.
 - Clicking a point on the canvas, or an issue in the Issues list, selects the matching row and opens its tab.

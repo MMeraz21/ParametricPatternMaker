@@ -8,7 +8,7 @@ import { IssuesPanel } from './editor/IssuesPanel'
 import { inspectPoint } from './editor/inspect'
 import { editorReducer, initEditorState } from './editor/state'
 import { PanelDock } from './panels/PanelDock'
-import { tableFor } from './panels/tables'
+import { tablesFor } from './panels/tables'
 
 export function App() {
   const [version, setVersion] = useState<string>()
@@ -20,7 +20,7 @@ export function App() {
   const [{ pattern, selection, panel }, dispatch] = useReducer(editorReducer, raglanTee, initEditorState)
   const resolved = useMemo(() => evaluate(pattern, pattern.activeSize), [pattern])
   const scene = useMemo(() => buildScene(pattern, resolved, selection), [pattern, resolved, selection])
-  const table = useMemo(() => tableFor(panel, pattern, resolved, selection), [panel, pattern, resolved, selection])
+  const tables = useMemo(() => tablesFor(panel, pattern, resolved, selection), [panel, pattern, resolved, selection])
   const inspection = selection?.kind === 'point' ? inspectPoint(pattern, resolved, selection.id) : null
 
   return (
@@ -51,7 +51,7 @@ export function App() {
           </div>
           <div className="h-64 shrink-0 border-t border-neutral-200">
             <PanelDock
-              table={table}
+              tables={tables}
               onShowPanel={(kind) => dispatch({ type: 'showPanel', panel: kind })}
               onEdit={(edit) => dispatch({ type: 'edit', edit })}
               onSelect={(key) => dispatch({ type: 'select', selection: key })}
