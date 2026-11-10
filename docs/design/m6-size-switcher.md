@@ -120,7 +120,7 @@ reference size. `bySize` is public because export and the seam checker need whol
 | `renderer/canvas/camera.ts` | `containsBounds`, the `reveal` action. |
 | `renderer/canvas/Canvas.tsx` | Ghost layer, legend, `reveal` when the overlay turns on. |
 | `renderer/panels/tables.ts` | Takes `SizeView`. `sizeTable`. Size columns keyed `size:<name>`. Stack point column. Missing values flagged per column. |
-| `renderer/panels/EditableTable.tsx`, `PanelDock.tsx` | Amber for other-size issues. Nullable `Row.key` and `Row.remove`. `Sizes` tab. |
+| `renderer/panels/EditableTable.tsx`, `PanelDock.tsx` | Yellow for other-size issues. Nullable `Row.key` and `Row.remove`. `Sizes` tab. |
 | `.agents/skills/verify-pattern-maker/` | `features/sizes.md`, `journeys/sizes.mjs`, index line. |
 | Docs | `PLAN.md:31`, `m3-canvas.md` (the `setActiveSize` note), `CLAUDE.md` (pipeline and "ten edits" becomes thirteen), `open-questions.md`. |
 
@@ -372,7 +372,7 @@ otherwise the first affected size's. `text` starts with the sizes whose message 
 | Size dropdown | Each option shows its count, `XXL (2 issues)`. The option's value stays the bare name. |
 | Issues panel | One row per finding, this size's first. A badge such as `XXL` sits outside the button when not every size has it, so all-size issues keep today's accessible name. The heading counts findings. |
 | Clicking an issue | Selects the item and, if the shown size doesn't have the problem, switches to `openAt`. You land where the problem is visible. |
-| Table cells | Every finding about the item, from any size. Red if `here`, amber if only in other sizes. A formula is shared by all sizes, so a problem in XXL is one you'd fix in this same cell. The tooltip uses `text`. |
+| Table cells | Every finding about the item, from any size. Red if `here`, yellow if only in other sizes. A formula is shared by all sizes, so a problem in XXL is one you'd fix in this same cell. The tooltip uses `text`. |
 | Measurement columns | `missing-measurement-value` flags the column of each affected size. This removes the accepted gap at `m4-editor-panels.md:104`. |
 | Inspector | Values are the shown size's. Issues list `text`. "This point can't be drawn" stays tied to the shown size. |
 | Overlay legend | The size's entry names what can't be drawn. |
@@ -513,7 +513,7 @@ Judge suggestions I didn't take: a two-step remove, because a size column and a 
 - We accept a new optional model field in exchange for leaving the draft layout free.
 - We accept some presentation in core (`scope`, `text`, here-first order) in exchange for all multi-size policy being reachable by vitest.
 - We accept that `wantedSize` can be stale in state, in exchange for one read-side fallback.
-- We accept that an amber cell can mean a problem you can't see in this size, in exchange for never hiding it.
+- We accept that a yellow cell can mean a problem you can't see in this size, in exchange for never hiding it.
 - We accept mechanical churn in renderer signatures and about 25 test call sites (one `viewOf` helper) in exchange for one way to get results.
 
 ## Alternatives considered
@@ -531,7 +531,6 @@ Judge suggestions I didn't take: a two-step remove, because a size column and a 
 
 - If point dragging ever lands, should graded evaluation get a one-size fast path? At 8× the raglan a commit costs 42 ms median, which is too slow for 60 Hz.
 - `PLAN.md:45` says `schemaVersion` and the code says `version`. Should this be settled before M8 closes the free window?
-- Amber versus red was chosen from code and hasn't been seen on screen.
 - `model.ts` and `evaluate.ts` change, so `/blast-radius` is required before shipping.
 
 ## Build order
@@ -541,7 +540,7 @@ Each step keeps tests and typecheck green.
 1. Size edits, `checkSizeName`, stricter `sizes` schema.
 2. `evaluateGraded` and `viewAt` against the fixture, with `/tdd`, using `evaluate` unchanged.
 3. Move the renderer to `SizeView`, delete `activeSize`, stop exporting `evaluate`. The dropdown works.
-4. Issue surfaces: dropdown count, badge, click-through, amber cells, per-column missing values.
+4. Issue surfaces: dropdown count, badge, click-through, yellow cells, per-column missing values.
 5. `Sizes` tab.
 6. `stackPoint`, ghosts, legend, `reveal`.
 7. `sizes` journey and docs.

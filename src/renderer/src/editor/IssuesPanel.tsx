@@ -25,7 +25,7 @@ export function IssuesPanel({ issues, onOpen }: IssuesPanelProps) {
               <button type="button" className="text-left hover:underline" onClick={() => onOpen(issue)}>
                 {wording(issue)}
               </button>
-              {issue.scope !== null && <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-800">{issue.scope}</span>}
+              {issue.scope !== null && <span className="ml-1 rounded bg-yellow-100 px-1 text-xs text-yellow-800">{issue.scope}</span>}
             </li>
           ))}
         </ul>

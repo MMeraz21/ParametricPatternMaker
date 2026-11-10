@@ -214,7 +214,7 @@ export function Canvas({ scene, onSelect }: CanvasProps) {
               <span aria-hidden="true" className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry.shown ? '#262626' : entry.tint }} />
               <span>
                 <span className={entry.shown ? 'font-semibold' : ''}>{entry.size}</span>
-                {entry.gaps.length > 0 && <span className="text-amber-700"> {entry.gaps.join(', ')}</span>}
+                {entry.gaps.length > 0 && <span className="text-yellow-700"> {entry.gaps.join(', ')}</span>}
               </span>
             </li>
           ))}

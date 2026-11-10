@@ -89,7 +89,7 @@ All sizes zooms out only if you were viewing the whole size and the nest doesn't
 ### How should a cell show a problem from another size? (from M6)
 
 A formula is shared by every size, so a problem in XXL is one you'd fix in the same cell. **Current default:** red for a problem in
-the size you're looking at, amber for a problem only in other sizes.
+the size you're looking at, yellow for a problem only in other sizes.
 
 ### Does a problem in one size block export? (from M6)
 
