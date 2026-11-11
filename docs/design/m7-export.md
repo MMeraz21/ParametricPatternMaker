@@ -1,6 +1,14 @@
 # Milestone 7: export
 
-Status: designed and reviewed. Cross-platform points added after review. Building.
+Status: built. Not yet printed on paper.
+
+Changes found while building:
+
+- The key is inset 5 mm like every piece. At (0, 0) the square's left line sat on the page clip edge and lost half its width (PDFKit measured 49.911 mm across). A plan test now keeps every block at least 1 mm from the poster edge.
+- `planPoster` takes about 10 ms per size, not 1 ms, because of the label search. That's still fine for `useMemo` per tick.
+- The key is 66 x 127.4 mm, and its rows moved slightly. Page counts are pinned in `poster.test.ts` and match the spike.
+- The renderer bundle grew by about 1 MB unminified, mostly pdf-lib's standard-font metrics.
+- The SVG groups are `data-block`, since the key is one of them.
 
 Numbers marked **ran** come from throwaway experiments on an Apple-silicon laptop on 2026-11-10, against the real `src/core`, pdf-lib 1.17.1
 and the repo's Electron 45 where stated. Numbers marked **unverified** are general knowledge nobody executed here. Product decisions with

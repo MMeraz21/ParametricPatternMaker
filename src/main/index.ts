@@ -1,5 +1,7 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { writeAtomically } from './atomicWrite'
+import { runSaveExport } from './saveExport'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -25,6 +27,18 @@ function createWindow(): void {
 }
 
 ipcMain.handle('app:getVersion', () => app.getVersion())
+
+ipcMain.handle('export:save', (event, request: unknown) =>
+  runSaveExport(request, {
+    // Read off the module at call time, so a journey can stub the dialog.
+    chooseFile: (options) => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      return window ? dialog.showSaveDialog(window, options) : dialog.showSaveDialog(options)
+    },
+    write: writeAtomically,
+    documentsDir: app.getPath('documents')
+  })
+)
 
 void app.whenReady().then(() => {
   createWindow()

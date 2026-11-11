@@ -5,6 +5,7 @@ import { Canvas } from './canvas/Canvas'
 import { buildScene } from './canvas/scene'
 import { Inspector } from './editor/Inspector'
 import { IssuesPanel } from './editor/IssuesPanel'
+import { ExportDialog } from './export/ExportDialog'
 import { inspectPoint, selectionForIssue } from './editor/inspect'
 import { editorReducer, initEditorState } from './editor/state'
 import { PanelDock } from './panels/PanelDock'
@@ -26,6 +27,8 @@ export function App() {
   const scene = useMemo(() => buildScene(pattern, view, selection, nestShown), [pattern, view, selection, nestShown])
   const tables = useMemo(() => tablesFor(panel, pattern, view, selection), [panel, pattern, view, selection])
   const inspection = selection?.kind === 'point' ? inspectPoint(pattern, view, selection.id) : null
+  // View state: never saved or undone.
+  const [exportOpen, setExportOpen] = useState(false)
 
   return (
     <div className="flex h-screen flex-col bg-neutral-50 text-neutral-800">
@@ -65,6 +68,9 @@ export function App() {
             <option value="in">inches</option>
           </select>
         </label>
+        <button type="button" onClick={() => setExportOpen(true)} className="rounded border border-neutral-300 bg-white px-2 py-0.5 text-sm text-neutral-700 hover:bg-neutral-100">
+          Export…
+        </button>
       </header>
       <main className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -85,6 +91,7 @@ export function App() {
           <IssuesPanel issues={view.issues} onOpen={(issue) => dispatch({ type: 'select', selection: selectionForIssue(issue), size: issue.openAt })} />
         </aside>
       </main>
+      {exportOpen && <ExportDialog pattern={pattern} graded={graded} shownSize={view.size} onClose={() => setExportOpen(false)} />}
     </div>
   )
 }

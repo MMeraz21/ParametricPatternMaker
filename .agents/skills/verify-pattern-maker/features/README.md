@@ -50,10 +50,11 @@ commands and observable proof.
   editing, renaming, adding, deleting, and jumping to rows from the canvas and issues list.
 - [Pieces](./pieces.md) covers cut lines, grainlines, folds and notch marks on the canvas, and editing
   allowances, edges, notches and segments in the Pieces and Segments tabs.
+- [Export](./export.md) covers the export dialog, saving a tiled PDF and a full-size SVG, sizes that can't print, and
+  cancelled or failed saves.
 - [Sizes](./sizes.md) covers the size dropdown, the nested all-sizes view, problems that happen in some
   sizes, and adding, renaming and removing sizes.
 
 ## Not yet built
 
-PLAN.md milestones 7 onward add: PDF/SVG export,
-open/save, and Convex sync. Add a feature file and a journey for each as it lands.
+PLAN.md milestones 8 onward add: open/save, and Convex sync. Add a feature file and a journey for each as it lands.

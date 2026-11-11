@@ -89,6 +89,14 @@ rejection message, so per-kind behaviour lives there and not in components. Ever
 `.tsx` components is pure and unit tested. Components are proved with the `canvas` and `editor-panels`
 journeys. Designs: `docs/design/m3-canvas.md` and `docs/design/m4-editor-panels.md`.
 
+### Export
+
+`printStatus` and `planPoster` in `core/poster.ts` turn `graded` into a `PosterPlan`: one sheet per printable size, with every
+mark in mm and a uniform page grid. `writePosterFile` in `core/posterFile.ts` writes it as a tiled PDF (`posterPdf.ts`, the only
+pdf-lib importer and the only place the mm-to-point scale exists) or a full-size SVG. The renderer builds the bytes and
+`window.api.saveExport` hands them to main, which only shows the save dialog and writes atomically (`main/saveExport.ts`).
+Design: `docs/design/m7-export.md`.
+
 `src/core/fixtures/raglan.ts` is the shared raglan tee fixture used across tests. Extend it as
 milestones add pieces; it is the MVP acceptance test.
 
