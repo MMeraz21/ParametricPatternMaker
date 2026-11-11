@@ -170,3 +170,26 @@ const XXL_ONLY_FAILURES: readonly PatternEdit[] = [
  * its cut line. The milestone 6 acceptance fixture; docs/design/m6-size-switcher.md says what it proves.
  */
 export const raglanFailingInXXL: Pattern = XXL_ONLY_FAILURES.reduce<Pattern>(applyEdit, raglanTee)
+
+const PRINT_HAZARDS: readonly PatternEdit[] = [
+  { kind: 'setUnits', units: 'in' },
+  // Not encodable in the PDF's standard font, and unsafe in XML unless escaped.
+  { kind: 'setPiece', pieceId: 'sleeve', patch: { name: 'Sleeve <袖> & "cuff"' } },
+  // A grainline with no length in S only. Its points are used by nothing else, so S keeps its outline and cut line.
+  { kind: 'add', item: { kind: 'point', point: { id: 'sleeveGrainTop', name: 'SleeveGrainTop', x: 'sleeve_centre', y: '100' } } },
+  { kind: 'add', item: { kind: 'point', point: { id: 'sleeveGrainEnd', name: 'SleeveGrainEnd', x: 'sleeve_centre', y: 'chest < 1000 ? 100 : 300' } } },
+  { kind: 'setPiece', pieceId: 'sleeve', patch: { grainline: ['sleeveGrainTop', 'sleeveGrainEnd'] } },
+  // A notch past the end of its edge in L only.
+  {
+    kind: 'setPiece',
+    pieceId: 'back',
+    patch: { notches: [{ id: 'backRaglanNotch', segmentId: 'backRaglan', distance: 'chest > 1100 ? 100 : chest > 1050 ? 99999 : 100' }] }
+  }
+]
+
+/**
+ * The raglan in inches with what only printing cares about: a piece name a PDF font can't encode and XML must escape,
+ * a grainline lost in S and a notch lost in L. M, XL and XXL are clean. One of the milestone 7 acceptance fixtures;
+ * docs/design/m7-export.md says what it proves.
+ */
+export const raglanPrintHazards: Pattern = PRINT_HAZARDS.reduce<Pattern>(applyEdit, raglanTee)
