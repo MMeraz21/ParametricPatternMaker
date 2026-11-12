@@ -18,6 +18,14 @@ describe('the public core API', () => {
     expect(Object.keys(core)).toEqual(expect.arrayContaining(['evaluateGraded', 'viewAt']))
   })
 
+  it.each(['writePosterPdf', 'writePosterSvg', 'packBoxes', 'pieceMarks', 'keyMarks', 'tileGuides', 'PT_PER_MM'])('keeps %s internal to export', (name) => {
+    expect(Object.keys(core)).not.toContain(name)
+  })
+
+  it('exports printStatus, planPoster and writePosterFile', () => {
+    expect(Object.keys(core)).toEqual(expect.arrayContaining(['printStatus', 'planPoster', 'writePosterFile', 'PRINT_INSTRUCTION', 'PAPER']))
+  })
+
   it('still exports the geometry the renderer and export use', () => {
     expect(Object.keys(core)).toEqual(expect.arrayContaining(['pathData', 'polygonPathData', 'distance', 'curveLength', 'flatten', 'vec']))
   })
@@ -64,6 +72,19 @@ describe('source imports', () => {
 
   it('imports clipper2-ts only from ringUnion', () => {
     expect(importersOf((specifier) => specifier.startsWith('clipper2-ts'))).toEqual(['core/ringUnion.test.ts', 'core/ringUnion.ts'])
+  })
+
+  it('imports pdf-lib only from posterPdf', () => {
+    expect(importersOf((specifier) => specifier === 'pdf-lib' || specifier.startsWith('pdf-lib/'))).toEqual(['core/posterPdf.test.ts', 'core/posterPdf.ts'])
+  })
+
+  it('imports nothing from Electron, Node or the UI in core outside tests', () => {
+    const banned = (specifier: string): boolean => /^(electron|react|react-dom)(\/|$)/.test(specifier) || specifier.startsWith('node:') || ['fs', 'path', 'os', 'zlib'].includes(specifier)
+    expect(sourceFiles.filter((file) => file.path.startsWith('core/') && !file.path.endsWith('.test.ts') && file.imports.some(banned)).map((file) => file.path)).toEqual([])
+  })
+
+  it('imports the export internals only from inside core', () => {
+    expect(importersOf((specifier) => /^@core\/(posterPdf|posterSvg|posterPack|posterArt)\b/.test(specifier))).toEqual([])
   })
 
   it('calls evaluate only from inside core', () => {

@@ -50,4 +50,28 @@ export {
 } from './outline'
 export type { CutLine, CutLineFailure, CutNotch, CutSpan } from './cutLine'
 export * from './edit'
+// Export: the plan and one way to write it. The packing, art and writers stay internal.
+export {
+  PAGE_OVERLAP,
+  PAPER,
+  PEN,
+  PRINT_INSTRUCTION,
+  PRINT_MARGIN,
+  planPoster,
+  printStatus,
+  type Block,
+  type Mark,
+  type PaperName,
+  type PenName,
+  type PieceDefect,
+  type PosterOutcome,
+  type PosterPlan,
+  type PosterRequest,
+  type PosterSheet,
+  type PrintDefect,
+  type Rect,
+  type SizePrintStatus,
+  type Tile
+} from './poster'
+export { writePosterFile, type ExportFormat, type PosterFile } from './posterFile'
 export * from './units'

@@ -93,8 +93,11 @@ the size you're looking at, yellow for a problem only in other sizes.
 
 ### Does a problem in one size block export? (from M6)
 
-A cut line can fail in XXL while M is fine. **Current default for M7 to confirm:** export is refused for the sizes that have the
-problem and works for the rest.
+A cut line can fail in XXL while M is fine. **Current default, sharpened in M7:** that whole size is refused and the others export.
+A size has a problem when a piece would print differently from the pattern: no outline, no cut line, no grainline, a fold that didn't
+resolve, or a notch that didn't place. A broken formula nothing printed uses doesn't count. The alternative is to print what works, or print a
+piece with a lost grainline or notch and a `CHECK:` line on it, which lets you test-fit a half-finished size but risks cutting fabric from
+an incomplete pattern. Details are in `docs/design/m7-export.md`.
 
 ### Reordering rows (from M4)
 
@@ -125,13 +128,66 @@ offset runs straight to where it meets its neighbour. A per-corner choice could 
 
 ### How long is a notch mark on the printed cut line? (from M5)
 
-**Current default:** 6 mm, cut inward from the cut line. T-notches or a depth tied to the allowance are
-the alternatives.
+**Current default:** 6 mm, cut inward from the cut line, and print uses it as built. T-notches or a depth tied to the allowance are
+the alternatives. Revisit after the first real cut.
 
 ### What does `cutCount: 2` mean? (from M5)
 
 It could be a mirrored pair, like sleeves, or two identical pieces. **Current default:** the app doesn't
-say. It carries the number and export prints "Cut 2".
+say. It carries the number and export prints "Cut 2", or "Cut 1 on fold" for a fold piece, with nothing about mirroring.
+
+### Which paper should export default to? (from M7)
+
+**Current default:** Letter where the system's region uses it (US, Canada, Mexico and a few others), else A4, changed in the export dialog for the session. A locale with no region, common on Linux, gives A4.
+A remembered choice is the likely addition. Printing a file made for the other paper is what makes a viewer scale it, so the file name carries the paper.
+
+### Should margin and overlap be adjustable? (from M7)
+
+**Current default:** no. 10 mm blank margin and 15 mm overlap, both constants. A printer that can't reach 10 mm from its edge would need a setting.
+
+### Should a fold piece print as a whole, mirrored? (from M7)
+
+**Current default:** no. It prints the drafted half with a "CUT ON FOLD" marking. A whole piece uses more paper, but some people cut single layers.
+
+### Should sizes nest on one printed sheet? (from M7)
+
+**Current default:** no. Each size gets its own sheet and A1. A printed nest saves a lot of paper, but it needs a way to tell seven lines apart in black and white, and a
+rule for a size that failed.
+
+### Is printing a piece's own pages easy enough? (from M7)
+
+**Current default:** pieces are packed together on one poster per size, and the test square is on A1 of each sheet. That's fewer pages, but reprinting one piece means finding its pages. A tile
+set per piece, with its own square, is the alternative.
+
+### May pieces rotate to save paper? (from M7)
+
+**Current default:** no, they stay as drafted so the grain stays as drawn. Turning a piece a quarter would still keep grain true and might save a few pages.
+
+### Where does an export's title come from? (from M7)
+
+Patterns have no name until M8. **Current default:** typed in the export dialog, defaulting to "Pattern". It prints in the key and names the file.
+
+### Should blank pages print? (from M7)
+
+**Current default:** no. A grid cell that meets no piece is skipped, labels keep their positions, and the page map in the key hatches it.
+
+### Should the seam line print? (from M7)
+
+**Current default:** yes, thin and dashed, inside the solid cut line. Some printed patterns show only the cut line.
+
+### What about piece names a PDF font can't print? (from M7)
+
+**Current default:** characters outside the standard font (Western European letters print fine) print as `?` in the PDF, and the SVG keeps them. Embedding a font is the fix if
+this comes up.
+
+### Several sizes in one file? (from M7)
+
+**Current default:** yes, one PDF or SVG for every ticked size, each with its own sheets. One file per size is the alternative.
+
+### Which OSes should CI and packaging cover? (from M7)
+
+**Current default:** the app is meant for Linux, macOS and Windows, and M7 uses nothing tied to one OS. CI still runs typecheck and tests only on Ubuntu, and there is no installer for any OS.
+A CI matrix of the three is the cheap next step. Installers are a milestone of their own.
 
 ### Is cut-on-fold a property of an edge? (from M5)
 

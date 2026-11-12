@@ -4,7 +4,7 @@ import { evaluate } from '../evaluate'
 import { add, derivativeAt, distance, flatten, norm, pointAt, scale, signedArea, type Vec2 } from '../geometry'
 import type { ResolvedPiece } from '../outline'
 import { areaOutside, ringIsSimple } from '../ringUnion'
-import { raglanFailingInXXL, raglanTee } from './raglan'
+import { raglanFailingInXXL, raglanPrintHazards, raglanTee } from './raglan'
 
 /**
  * The raglan as the milestone 5 acceptance test. docs/design/m5-pieces.md says what each check asserts.
@@ -209,5 +209,44 @@ describe('raglan failing only in XXL', () => {
       ['back', true],
       ['sleeve', true]
     ])
+  })
+})
+
+describe('raglan with print hazards', () => {
+  const summary = (size: string): unknown => {
+    const resolved = evaluate(raglanPrintHazards, size)
+    return {
+      issues: resolved.issues.map((issue) => issue.kind),
+      pieces: Object.values(resolved.pieces).map((piece) => [piece.id, piece.cutLine !== undefined, piece.grainline !== undefined, piece.cutLine?.notches.length])
+    }
+  }
+  const everyPiece = [
+    ['front', true, true, 1],
+    ['back', true, true, 1],
+    ['sleeve', true, true, 0],
+    ['neckband', true, true, 0]
+  ]
+
+  it('is in inches, with a name that needs care in a PDF and in XML', () => {
+    expect(raglanPrintHazards.units).toBe('in')
+    expect(evaluate(raglanPrintHazards, 'M').pieces['sleeve']?.name).toBe('Sleeve <袖> & "cuff"')
+  })
+
+  it.each(['M', 'XL', 'XXL'])('is clean in size %s', (size) => {
+    expect(summary(size)).toEqual({ issues: [], pieces: everyPiece })
+  })
+
+  it('loses only the Sleeve grainline in S', () => {
+    expect(summary('S')).toEqual({
+      issues: ['degenerate-grainline'],
+      pieces: [everyPiece[0], everyPiece[1], ['sleeve', true, false, 0], everyPiece[3]]
+    })
+  })
+
+  it('loses only the Back notch in L', () => {
+    expect(summary('L')).toEqual({
+      issues: ['notch-out-of-range'],
+      pieces: [everyPiece[0], ['back', true, true, 0], everyPiece[2], everyPiece[3]]
+    })
   })
 })
