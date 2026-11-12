@@ -1,6 +1,6 @@
 # Milestone 7: export
 
-Status: built. Not yet printed on paper.
+Status: built. Scale checked by three independent readers of the file (vitest matrix walk, macOS PDFKit, MuPDF). Not yet printed on paper.
 
 Changes found while building:
 
@@ -356,7 +356,9 @@ Q
 ```
 
 Independent check (**ran**): a real raglan M PDF on A4 with the rounded box, rendered by macOS PDFKit at 600 dpi, has a test square of 49.996 mm centre to centre on both
-axes, where one pixel is 0.042 mm. The raw `MediaBox` reads `[ 0 0 595.2756 841.8898 ]`, there is no raw `/CropBox`, and `PrintScaling` reads `None`.
+axes, where one pixel is 0.042 mm. A second renderer agrees (**ran** after the build, on raglan M Letter and A4 and the inch fixture): MuPDF 1.26 reads the
+square as 50.000 x 50.000 mm (50.800 for inches) through its own matrix stack, 50.004 x 49.995 mm in a 1200 dpi raster, with the text upright.
+`scripts/measure-pdf-mupdf.py` repeats this on any OS. The raw `MediaBox` reads `[ 0 0 595.2756 841.8898 ]`, there is no raw `/CropBox`, and `PrintScaling` reads `None`.
 
 **How it's tested.** Each of these fails if the scale drifts.
 
@@ -367,7 +369,8 @@ axes, where one pixel is 0.042 mm. The raw `MediaBox` reads `[ 0 0 595.2756 841.
 - No `/CropBox`, no `/UserUnit`, `PrintScaling` is `None`, on the raw dictionary.
 - Translation only: for every piece of every size, the plan's cut ring plus offset equals `resolved`'s ring plus offset, point by point.
 - Journey, optional second opinion: on macOS, `measure-pdf.swift` renders page 1 at 600 dpi with PDFKit and asserts 50 mm ± 0.1 centre to centre on both axes. On Linux and Windows the step reports "skipped, macOS only" and the journey still passes, because the vitest case above is the proof and runs everywhere. If journeys start running off macOS, replace it with a pdf.js render inside the Electron window.
-- By hand: print A1 and measure with a ruler. This is the last acceptance step and nothing replaces it.
+- Optional, any OS: `measure-pdf-mupdf.py` measures page 1 with MuPDF, vector and raster, and checks the text is upright.
+- By hand: print A1 and measure with a ruler. Only this catches a driver that scales anyway. Nobody on the team has a printer yet, so it waits for the first person who prints a pattern; the test square on A1 is there for exactly that.
 
 **What the user is told,** in two places they can't miss. The dialog shows `PRINT_INSTRUCTION`. The key on A1 repeats it, next to "This square must measure 5 cm". `/PrintScaling` is
 honoured by Acrobat and ignored by many others (**unverified**), which is why the message and the square exist.

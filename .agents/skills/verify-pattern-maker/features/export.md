@@ -30,7 +30,7 @@ Preconditions:
 - **Open.** `node .agents/skills/verify-pattern-maker/scripts/run.mjs .agents/skills/verify-pattern-maker/journeys/export.mjs`.
 - **Dialog.** `getByRole('button', { name: 'Export…' }).click()`, then `getByLabel('Paper').selectOption('letter')`. The footer reads `21 pages of Letter`.
 - **Save.** The native save dialog is replaced with `app.evaluate` returning a path in a temporary folder. `Save PDF` shows `Saved to <path>`, and the file loads with pdf-lib.
-- **Measure.** On macOS, `scripts/measure-pdf.swift <file> 0 600 20 47` renders page A1 with PDFKit and prints the square's size. Off macOS the step is recorded as skipped.
+- **Measure.** On macOS, `scripts/measure-pdf.swift <file> 0 600 20 47` renders page A1 with PDFKit and prints the square's size. Off macOS the step is recorded as skipped. On any OS, `scripts/measure-pdf-mupdf.py <file> 50` (PyMuPDF in a venv outside the repo; setup is in the script header) measures the same square with MuPDF.
 - **Refuse.** Close, type `chest > 1200 ? 0 : 60` into `band_width formula` on the Variables tab, reopen. `Size XXL` is disabled and reads `XXL can't be printed: Neckband has no outline.`
 - **Cancel and fail.** The stub returns `{ canceled: true }`, then a path in a missing folder. The second shows `That folder doesn't exist any more.`
 
@@ -39,4 +39,4 @@ Preconditions:
 - The save dialog is native and can't be clicked by Playwright. Stub it per save, before clicking.
 - The default paper follows the system locale, so select it before checking page counts.
 - `(20, 47)` mm is inside the test square on A1 only while the margin, key inset and key layout stay as built. If the measure step reports no square, check those first.
-- The PDFKit render proves the file, not a printer. The last check is printing A1 at 100% and measuring with a ruler.
+- The PDFKit and MuPDF renders prove the file, not a printer. The last check is printing A1 at 100% and measuring with a ruler.
