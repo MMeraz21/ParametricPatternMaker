@@ -1,7 +1,17 @@
 # Milestone 8: file I/O
 
-Status: designed, not built. The hazard fixtures are added (`src/core/fixtures/patternFiles.ts`, `src/main/fixtures/staleRecents.ts`) with
-tests that pin what each one is, using today's code.
+Status: built. Unit tests and the `file-io` journey pass on macOS, and every earlier journey still passes with the new teardown.
+
+Changes found while building:
+
+- `answerOf` and `Prompt` keep each native prompt's buttons and answers together (`askToSavePrompt`, `conflictPrompt`), in place of
+  `askToSaveOptions` and `conflictOptions`.
+- Node ports live in `main/nodeFiles.ts`, shared by `index.ts` and the tests.
+- `KnownFiles` gained `clearRecents` and `flush`.
+- The renderer reads the bridge types through `file/bridge.ts`, aliases off `Window['api']`, as `export/stage.ts` does.
+- After the last window closes, Playwright can't report the app's process, so `run.mjs` guards that lookup.
+- The three unverified assumptions held: `blur()` commits a cell before the command reads it, `destroy()` skips the close question,
+  and `MenuItem.click()` from `app.evaluate` runs the item's handler.
 
 Numbers marked **ran** come from throwaway experiments on an Apple-silicon Mac on 2026-11-13. They ran against the real `src/core`, zod
 4.6.7, Node 24.4 and the repo's Electron 45.1.0 binary, in the two design candidates' scratch folders. Numbers marked **unverified** are general

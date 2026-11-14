@@ -54,7 +54,9 @@ commands and observable proof.
   cancelled or failed saves.
 - [Sizes](./sizes.md) covers the size dropdown, the nested all-sizes view, problems that happen in some
   sizes, and adding, renaming and removing sizes.
+- [File I/O](./file-io.md) covers New, Open, Open Recent, Save and Save As in the File menu, files that won't open, a recent
+  file that has moved, a file changed by another program, and the question about unsaved edits on open and close.
 
 ## Not yet built
 
-PLAN.md milestones 8 onward add: open/save, and Convex sync. Add a feature file and a journey for each as it lands.
+PLAN.md milestone 8b onward adds Convex sync. Add a feature file and a journey for each as it lands.

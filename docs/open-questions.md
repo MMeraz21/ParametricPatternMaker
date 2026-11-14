@@ -163,11 +163,6 @@ set per piece, with its own square, is the alternative.
 
 **Current default:** no, they stay as drafted so the grain stays as drawn. Turning a piece a quarter would still keep grain true and might save a few pages.
 
-### Where does an export's title come from? (from M7)
-
-Patterns have no name until M8. **Current default:** typed in the export dialog, defaulting to "Pattern". It prints in the key and names the file.
-M8 plans to default it to the file's name, and "Pattern" for an untitled document. It moves to Decided once that's built.
-
 ### Should blank pages print? (from M7)
 
 **Current default:** no. A grid cell that meets no piece is skipped, labels keep their positions, and the page map in the key hatches it.
@@ -283,6 +278,9 @@ filled-in outline and show a warning.
 canvas is the likely improvement.
 
 ## Decided
+
+- **An export's title comes from the file's name** (M8), or "Pattern" for an untitled document. It can still be changed in the export
+  dialog, and it prints in the key and names the file.
 
 - **Sizes can be added, removed and renamed** (M6) on the Sizes tab. Formulas never name a size, so they
   aren't touched. The last size can't be removed. Details are in `docs/design/m6-size-switcher.md`.
