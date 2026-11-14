@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyEdit, evaluateGraded, viewAt, type Pattern } from '@core'
 import { raglanTee } from '@core/fixtures/raglan'
 import { inspectPoint, pointRoles, selectionForIssue } from './inspect'
-import { editorReducer, initEditorState } from './state'
+import { documentStatus, editorReducer, initEditorState, isDirty } from './state'
 
 const viewOf = (pattern: Pattern, size = 'M') => viewAt(evaluateGraded(pattern), size)
 
@@ -186,5 +186,44 @@ describe('the size on screen', () => {
     const opened = editorReducer(initial, { type: 'select', selection: { kind: 'piece', id: 'neckband' }, size: 'XXL' })
     expect(opened).toMatchObject({ selection: { kind: 'piece', id: 'neckband' }, wantedSize: 'XXL', panel: 'piece' })
     expect(editorReducer(opened, { type: 'select', selection: null }).wantedSize).toBe('XXL')
+  })
+})
+
+describe('the saved document', () => {
+  const file = { path: '/home/me/Raglan.json', name: 'Raglan' }
+  const edit = { type: 'edit', edit: { kind: 'setFormula', owner: { kind: 'variable', name: 'chest_ease' }, formula: '120' } } as const
+
+  it('starts saved, and an edit makes it unsaved', () => {
+    const initial = initEditorState(raglanTee, 'M', file)
+    expect(isDirty(initial)).toBe(false)
+    expect(documentStatus(initial)).toEqual({ name: 'Raglan', path: file.path, dirty: false })
+    expect(isDirty(editorReducer(initial, edit))).toBe(true)
+  })
+
+  it('stays saved through an edit that changes nothing', () => {
+    const initial = initEditorState(raglanTee)
+    expect(isDirty(editorReducer(initial, { type: 'edit', edit: { ...edit.edit, formula: '100' } }))).toBe(false)
+  })
+
+  it('reads as saved when the pattern goes back to the saved one, which is what undo will do', () => {
+    const edited = editorReducer(initEditorState(raglanTee), edit)
+    expect(isDirty({ ...edited, pattern: edited.saved })).toBe(false)
+  })
+
+  it('keeps a newer edit unsaved when an older pattern is the one saved', () => {
+    const initial = initEditorState(raglanTee, 'M')
+    const first = editorReducer(initial, edit)
+    const second = editorReducer(first, { type: 'edit', edit: { ...edit.edit, formula: '130' } })
+    const saved = editorReducer(second, { type: 'saved', pattern: first.pattern, file })
+    expect(isDirty(saved)).toBe(true)
+    expect(saved).toMatchObject({ pattern: second.pattern, file, wantedSize: 'M', selection: second.selection })
+  })
+
+  it('starts over on replace: selection, panel and size reset, saved, with the notice given', () => {
+    const busy = editorReducer(editorReducer(initEditorState(raglanTee, 'XL'), edit), { type: 'select', selection: { kind: 'point', id: 'hps' } })
+    const notice = { tone: 'info', text: 'Upgraded.' } as const
+    const replaced = editorReducer(busy, { type: 'replace', pattern: raglanTee, file, notice })
+    expect(replaced).toEqual({ ...initEditorState(raglanTee, undefined, file), notice })
+    expect(isDirty(replaced)).toBe(false)
   })
 })

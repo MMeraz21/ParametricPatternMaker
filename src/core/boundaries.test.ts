@@ -26,6 +26,14 @@ describe('the public core API', () => {
     expect(Object.keys(core)).toEqual(expect.arrayContaining(['printStatus', 'planPoster', 'writePosterFile', 'PRINT_INSTRUCTION', 'PAPER']))
   })
 
+  it('exports readPatternFile, writePatternFile and blankPattern', () => {
+    expect(Object.keys(core)).toEqual(expect.arrayContaining(['readPatternFile', 'writePatternFile', 'blankPattern']))
+  })
+
+  it.each(['upgrade', 'MIGRATIONS'])('keeps %s internal to the file format', (name) => {
+    expect(Object.keys(core)).not.toContain(name)
+  })
+
   it('still exports the geometry the renderer and export use', () => {
     expect(Object.keys(core)).toEqual(expect.arrayContaining(['pathData', 'polygonPathData', 'distance', 'curveLength', 'flatten', 'vec']))
   })
@@ -85,6 +93,17 @@ describe('source imports', () => {
 
   it('imports the export internals only from inside core', () => {
     expect(importersOf((specifier) => /^@core\/(posterPdf|posterSvg|posterPack|posterArt)\b/.test(specifier))).toEqual([])
+  })
+
+  it('keeps @core out of main, which reads and writes bytes only', () => {
+    expect(sourceFiles.filter((file) => file.path.startsWith('main/') && !file.path.endsWith('.test.ts') && file.imports.some((s) => s.startsWith('@core'))).map((file) => file.path)).toEqual([])
+  })
+
+  it('reads pattern files only through readPatternFile outside core', () => {
+    const callers = readdirSync(srcRoot, { recursive: true, encoding: 'utf8' })
+      .filter((file) => /\.(ts|tsx)$/.test(file) && !file.split(sep).join('/').startsWith('core/'))
+      .filter((file) => /\bparsePattern\b/.test(readFileSync(join(srcRoot, file), 'utf8')))
+    expect(callers).toEqual([])
   })
 
   it('calls evaluate only from inside core', () => {

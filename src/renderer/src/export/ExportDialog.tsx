@@ -5,11 +5,24 @@ import { defaultPaper, defaultTicks, pagesOf, refusalText, stageAfter, type Expo
 /** Chosen once per session, so reopening the dialog keeps it. */
 let sessionPaper: PaperName | null = null
 
-export function ExportDialog({ pattern, graded, shownSize, onClose }: { pattern: Pattern; graded: GradedPattern; shownSize: string; onClose: () => void }) {
+export function ExportDialog({
+  pattern,
+  graded,
+  shownSize,
+  defaultTitle,
+  onClose
+}: {
+  pattern: Pattern
+  graded: GradedPattern
+  shownSize: string
+  /** The document's name, or "Pattern" for an untitled one. */
+  defaultTitle: string
+  onClose: () => void
+}) {
   const status = useMemo(() => printStatus(pattern, graded), [pattern, graded])
   const [ticked, setTicked] = useState(() => defaultTicks(status, shownSize))
   const [paper, setPaper] = useState<PaperName>(() => sessionPaper ?? defaultPaper(navigator.language))
-  const [title, setTitle] = useState('Pattern')
+  const [title, setTitle] = useState(defaultTitle)
   const [stage, setStage] = useState<ExportStage>({ kind: 'idle' })
   const outcome = useMemo(() => planPoster(pattern, graded, { sizes: [...ticked], paper, title: title.trim() || 'Pattern' }), [pattern, graded, ticked, paper, title])
 

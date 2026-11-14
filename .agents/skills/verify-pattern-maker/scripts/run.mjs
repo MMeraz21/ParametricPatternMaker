@@ -169,7 +169,19 @@ try {
   if (page) await evidence.screenshot(page, 'failure').catch(() => {})
 } finally {
   // Tear down only the instance this run launched.
-  const pid = app?.process().pid
+  // A journey may have quit the app already, and then Playwright can't report the process.
+  let pid
+  try {
+    pid = app?.process().pid
+  } catch {
+    pid = undefined
+  }
+  // Every journey edits, so a window would ask about unsaved changes on close. destroy() skips that question.
+  await app
+    ?.evaluate(({ BrowserWindow }) => {
+      for (const win of BrowserWindow.getAllWindows()) win.destroy()
+    })
+    .catch(() => {})
   await app?.close().catch(() => {})
   if (pid) {
     try {

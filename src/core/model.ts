@@ -21,21 +21,21 @@ export const IdSchema = z.string().min(1)
 export type Id = z.infer<typeof IdSchema>
 
 /** A body measurement with one value (mm) per size, e.g. chest. */
-export const MeasurementSchema = z.object({
+export const MeasurementSchema = z.strictObject({
   name: z.string(),
   values: z.record(SizeNameSchema, z.number())
 })
 export type Measurement = z.infer<typeof MeasurementSchema>
 
 /** A named formula, e.g. `ease = 10` or `body_width = chest / 4 + ease`. */
-export const VariableSchema = z.object({
+export const VariableSchema = z.strictObject({
   name: z.string(),
   formula: z.string()
 })
 export type Variable = z.infer<typeof VariableSchema>
 
 /** A point whose coordinates are formulas. Formulas may reference other points as `A.x` / `A.y`. */
-export const PointSchema = z.object({
+export const PointSchema = z.strictObject({
   id: IdSchema,
   name: z.string(),
   x: z.string(),
@@ -43,7 +43,7 @@ export const PointSchema = z.object({
 })
 export type Point = z.infer<typeof PointSchema>
 
-export const LineSegmentSchema = z.object({
+export const LineSegmentSchema = z.strictObject({
   id: IdSchema,
   kind: z.literal('line'),
   from: IdSchema,
@@ -52,7 +52,7 @@ export const LineSegmentSchema = z.object({
 export type LineSegment = z.infer<typeof LineSegmentSchema>
 
 /** Cubic bezier. Control points are ordinary Points so they can be formula-driven relative to anchors. */
-export const BezierSegmentSchema = z.object({
+export const BezierSegmentSchema = z.strictObject({
   id: IdSchema,
   kind: z.literal('bezier'),
   from: IdSchema,
@@ -80,14 +80,14 @@ export function segmentPointIds(segment: Segment): Id[] {
 }
 
 /** A segment used in a piece outline, optionally traversed backwards. */
-export const SegmentRefSchema = z.object({
+export const SegmentRefSchema = z.strictObject({
   segmentId: IdSchema,
   reversed: z.boolean().optional()
 })
 export type SegmentRef = z.infer<typeof SegmentRefSchema>
 
 /** A notch on a segment. `distance` is a formula (mm along the segment from its start). */
-export const NotchDefSchema = z.object({
+export const NotchDefSchema = z.strictObject({
   id: IdSchema,
   segmentId: IdSchema,
   distance: z.string()
@@ -95,13 +95,13 @@ export const NotchDefSchema = z.object({
 export type NotchDef = z.infer<typeof NotchDefSchema>
 
 /** Allowance widths are formulas (mm). `perEdge` overrides `default` for the segments it names. */
-export const SeamAllowanceSchema = z.object({
+export const SeamAllowanceSchema = z.strictObject({
   default: z.string(),
   perEdge: z.record(IdSchema, z.string()).optional()
 })
 export type SeamAllowance = z.infer<typeof SeamAllowanceSchema>
 
-export const PieceSchema = z.object({
+export const PieceSchema = z.strictObject({
   id: IdSchema,
   name: z.string(),
   outline: z.array(SegmentRefSchema),
@@ -150,9 +150,9 @@ export function visitPieceFormulas(piece: Piece, visit: (owner: PieceFormulaOwne
 export const DisplayUnitsSchema = z.enum(['cm', 'in'])
 export type DisplayUnits = z.infer<typeof DisplayUnitsSchema>
 
-export const PatternSchema = z.object({
+export const PatternSchema = z.strictObject({
   /** Schema version, used by migrations. */
-  version: z.number().int().positive(),
+  version: z.literal(CURRENT_SCHEMA_VERSION),
   units: DisplayUnitsSchema,
   sizes: z
     .tuple([SizeNameSchema])

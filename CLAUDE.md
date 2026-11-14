@@ -80,7 +80,7 @@ with `renameReferences` in `formula.ts`, which keeps the user's text.
 
 ### Renderer
 
-`App.tsx` holds the document in one `useReducer` (`editor/state.ts`). The size on screen is view state there, never
+`App.tsx` holds the document in an `EditorStore` (`editor/store.ts`) over the `editor/state.ts` reducer. The size on screen is view state there, never
 saved or undone. From the pattern, `evaluateGraded` and `viewAt` produce the SizeView, and `canvas/scene.ts` builds plain drawable data. The canvas camera (`canvas/camera.ts`)
 is view state owned by `Canvas`, so pan and zoom never re-evaluate. Input policy lives in `canvas/input.ts`:
 wheel and pinch, click versus drag-pan, and nearest-marker picking. The editor panels are one `EditableTable`
@@ -96,6 +96,16 @@ mark in mm and a uniform page grid. `writePosterFile` in `core/posterFile.ts` wr
 pdf-lib importer and the only place the mm-to-point scale exists) or a full-size SVG. The renderer builds the bytes and
 `window.api.saveExport` hands them to main, which only shows the save dialog and writes atomically (`main/saveExport.ts`).
 Design: `docs/design/m7-export.md`.
+
+### File I/O
+
+A pattern file is the bare `Pattern` as JSON. `readPatternFile` and `writePatternFile` in `core/patternFile.ts` are the only way
+bytes become a pattern and back: they check the version before parsing, run `migrations.ts`, and write canonical order. The schema
+is strict, so an unknown key or version is refused, never dropped. The renderer owns the document: `editor/store.ts` holds the
+reducer behind a synchronous `getState`, unsaved is `pattern !== saved`, and `file/commands.ts` runs every file command one at a
+time, committing a half-typed cell first. Main reads and writes bytes only (no `@core`): `documentFiles.ts` with `knownFiles.ts`
+(paths it handed out, their stamps, recents), `closeGate.ts` (asks the renderer on every close) and `appMenu.ts`. Hazard fixtures are
+`core/fixtures/patternFiles.ts` and `main/fixtures/staleRecents.ts`. Design: `docs/design/m8-file-io.md`.
 
 `src/core/fixtures/raglan.ts` is the shared raglan tee fixture used across tests. Extend it as
 milestones add pieces; it is the MVP acceptance test.
