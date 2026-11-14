@@ -166,6 +166,7 @@ set per piece, with its own square, is the alternative.
 ### Where does an export's title come from? (from M7)
 
 Patterns have no name until M8. **Current default:** typed in the export dialog, defaulting to "Pattern". It prints in the key and names the file.
+M8 plans to default it to the file's name, and "Pattern" for an untitled document. It moves to Decided once that's built.
 
 ### Should blank pages print? (from M7)
 
@@ -188,6 +189,75 @@ this comes up.
 
 **Current default:** the app is meant for Linux, macOS and Windows, and M7 uses nothing tied to one OS. CI still runs typecheck and tests only on Ubuntu, and there is no installer for any OS.
 A CI matrix of the three is the cheap next step. Installers are a milestone of their own.
+
+### What extension should pattern files use? (from M8)
+
+**Current default:** `.json`, suggested as `<name>.json`. Open also offers All files, because the content decides. A private extension such as
+`.pattern` would let a double-click open the app and give the file its own icon, but that needs an installer and a file association first.
+
+### What opens at launch? (from M8)
+
+**Current default:** an untitled copy of the raglan at M, with nothing unsaved, as today. Reopening the last file, a blank pattern, or a start
+screen with templates and recent files (the likely answer once M9 has templates) are the alternatives.
+
+### What does File > New make? (from M8)
+
+**Current default:** a blank pattern with one size, M, in cm, and nothing else. "New from template" arrives with M9.
+
+### What about a file this version only partly understands? (from M8)
+
+A file from a newer version, or one with a field this version doesn't know (a hand edit, or another tool), could lose data if it were opened
+and saved. **Current default:** refuse it and say why, never open it read-only, and never drop the field. Opening such a file as an untitled
+copy, with a list of what saving would drop, is the friendlier alternative for extra fields.
+
+### Should saving an older file ask first? (from M8)
+
+There are no older formats yet. **Current default:** an older file opens with a note that saving updates it and older versions of the app
+won't open it after that. Save then updates it without asking again.
+
+### How many recent files, and what happens to missing ones? (from M8)
+
+**Current default:** 10, in File > Open Recent, with Clear Menu. One that's gone when you click it (renamed, moved or deleted) is removed, with a
+message. One that's still there but can't be opened stays. Greying out missing entries would need a check of every file each time the menu opens,
+which can hang on a sleeping network drive. The macOS Dock and the Windows jump list need opening from the OS first.
+
+### Should Open and Save have buttons in the window? (from M8)
+
+**Current default:** no. They're in the File menu with the usual shortcuts (Ctrl or Cmd with O, S, Shift+S and N), and the window shows the
+file's name and "Edited". A visible recent list is planned for M9's start screen.
+
+### What if another program changed the file? (from M8)
+
+**Current default:** Save notices and asks whether to replace it, save a copy somewhere else, or cancel. Nothing watches the file while it's open,
+and nothing merges.
+
+### Does the app keep running with no window open? (from M8)
+
+**Current default:** no. Closing the window quits on every OS, macOS included, where apps usually keep running. Keeping it alive means the
+menu has to open a window first and then the file.
+
+### Does saving a document with no changes write the file? (from M8)
+
+**Current default:** no, it does nothing, so the file's modified time doesn't change. The alternative writes anyway, which would recreate a
+file deleted behind the app's back.
+
+### Does a formula that was refused count as unsaved? (from M8)
+
+A formula with a typing mistake stays in its cell with the reason, and isn't part of the pattern. **Current default:** it isn't saved, and closing
+doesn't ask about it unless there are other changes, so it's lost. Asking about it means tracking cells that hold a refused draft.
+
+### Autosave and crash recovery (from M8)
+
+**Current default:** none. A crash, a force-quit or a reload in development loses unsaved edits. A recovery copy in the app's own folder,
+offered at the next launch, is the likely addition.
+
+### How big is too big to open? (from M8)
+
+**Current default:** a file over 16 MB is refused without reading it. The raglan is 11 KB.
+
+### Opening a pattern from Finder or Explorer (from M8)
+
+**Current default:** not possible yet. It needs a file association, which needs an installer. Open the app, then File > Open.
 
 ### Is cut-on-fold a property of an edge? (from M5)
 
