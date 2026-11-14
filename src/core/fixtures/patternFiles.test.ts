@@ -38,20 +38,17 @@ describe('pattern file hazards', () => {
     expect(result.error.issues.map((issue) => issue.path)).toEqual([['pieces', 2, 'cutCount']])
   })
 
-  // The next two pin the data loss M8 removes. When decision 2 lands, parsePattern refuses both and these tests change with it.
-  it('has a current-version file with a field that today parsePattern silently drops', () => {
+  // Both lost data before M8. The strict schema now refuses them, and readPatternFile says why.
+  it('has a current-version file with a field parsePattern refuses rather than drops', () => {
     const raw = json(PATTERN_FILE_HAZARDS.unknownField)
     expect(raw).toMatchObject({ version: CURRENT_SCHEMA_VERSION, pieces: [{}, {}, { id: 'sleeve', lining: true }, {}] })
-    const result = parsePattern(raw)
-    expect(result.ok && result.pattern.pieces[2]).toEqual(raglanTee.pieces[2])
+    expect(parsePattern(raw).ok).toBe(false)
   })
 
-  it('has a newer-version file that today parsePattern accepts, losing its new field', () => {
+  it('has a newer-version file that parsePattern refuses', () => {
     const raw = json(PATTERN_FILE_HAZARDS.newerVersion)
     expect(raw).toMatchObject({ version: CURRENT_SCHEMA_VERSION + 1, pieces: [{}, {}, { lining: true }, {}] })
-    const result = parsePattern(raw)
-    expect(result.ok && result.pattern.version).toBe(CURRENT_SCHEMA_VERSION + 1)
-    expect(result.ok && 'lining' in (result.pattern.pieces[2] ?? {})).toBe(false)
+    expect(parsePattern(raw).ok).toBe(false)
   })
 
   it('has JSON from another program, without a numeric version', () => {

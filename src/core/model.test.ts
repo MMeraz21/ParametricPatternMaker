@@ -47,8 +47,25 @@ describe('parsePattern', () => {
     expect(parsePattern(JSON.parse(JSON.stringify({ ...raglanTee, pieces })))).toEqual({ ok: true, pattern: { ...raglanTee, pieces } })
   })
 
-  it('does not keep a saved active size', () => {
+  it('refuses a saved active size rather than dropping it', () => {
     const result = parsePattern({ ...raglanTee, activeSize: 'M' })
-    expect(result.ok && Object.keys(result.pattern)).not.toContain('activeSize')
+    expect(result.ok).toBe(false)
+  })
+
+  it('refuses a version it does not know', () => {
+    expect(parsePattern({ ...raglanTee, version: 2 }).ok).toBe(false)
+  })
+
+  it.each([
+    ['the pattern', { ...raglanTee, layers: [] }, []],
+    ['a piece', { ...raglanTee, pieces: raglanTee.pieces.map((piece, i) => (i === 0 ? { ...piece, lining: true } : piece)) }, ['pieces', 0]],
+    ['a line', { ...raglanTee, segments: raglanTee.segments.map((s) => (s.kind === 'line' ? { ...s, colour: 'red' } : s)) }, ['segments']],
+    ['a bezier', { ...raglanTee, segments: raglanTee.segments.map((s) => (s.kind === 'bezier' ? { ...s, colour: 'red' } : s)) }, ['segments']]
+  ])('refuses an unknown key on %s instead of dropping it', (_where, input, pathStart) => {
+    const result = parsePattern(input)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.issues[0]?.code).toBe('unrecognized_keys')
+    expect(result.error.issues[0]?.path.slice(0, pathStart.length)).toEqual(pathStart)
   })
 })

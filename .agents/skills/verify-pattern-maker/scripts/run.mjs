@@ -170,6 +170,12 @@ try {
 } finally {
   // Tear down only the instance this run launched.
   const pid = app?.process().pid
+  // Every journey edits, so a window would ask about unsaved changes on close. destroy() skips that question.
+  await app
+    ?.evaluate(({ BrowserWindow }) => {
+      for (const win of BrowserWindow.getAllWindows()) win.destroy()
+    })
+    .catch(() => {})
   await app?.close().catch(() => {})
   if (pid) {
     try {
