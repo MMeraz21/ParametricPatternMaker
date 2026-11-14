@@ -1,15 +1,22 @@
 import { CURRENT_SCHEMA_VERSION, type Pattern } from '../model'
+import { writePatternFile } from '../patternFile'
 import { raglanTee } from './raglan'
 
 /**
  * Pattern files as bytes, for the milestone 8 reader. Each hazard is derived from the raglan, so it follows the
  * raglan as it grows. docs/design/m8-file-io.md, decision 16, says what `readPatternFile` must answer for each.
  *
- * The clean text is `JSON.stringify` with 2 spaces and a final newline. Once `writePatternFile` exists, it
- * replaces `fileText` here, and every hazard follows.
+ * The clean text is what `writePatternFile` saves. Hazards that change the content use the same layout.
  */
 
 const fileText = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
+
+function savedText(pattern: Pattern): string {
+  const result = writePatternFile(pattern)
+  if (!result.ok) throw new Error('The raglan fails its own schema')
+  return new TextDecoder().decode(result.data)
+}
+
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text)
 
 /** Little-endian UTF-16 with a byte order mark, as an older Windows Notepad saves "Unicode". */
@@ -38,7 +45,7 @@ const withLiningOnSleeve = (pattern: Pattern): unknown => ({
   pieces: pattern.pieces.map((piece) => (piece.id === 'sleeve' ? { ...piece, lining: true } : piece))
 })
 
-export const raglanFileText = fileText(raglanTee)
+export const raglanFileText = savedText(raglanTee)
 
 export const PATTERN_FILE_HAZARDS = {
   /** The raglan, as saved. Opens equal to `raglanTee`. */

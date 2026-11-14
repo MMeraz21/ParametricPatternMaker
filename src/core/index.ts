@@ -75,3 +75,5 @@ export {
 } from './poster'
 export { writePosterFile, type ExportFormat, type PosterFile } from './posterFile'
 export * from './units'
+// The file format. The migrations table stays internal: readPatternFile is the only way in.
+export { blankPattern, readPatternFile, writePatternFile, type FileIssue, type PatternFileProblem, type ReadPatternResult, type WritePatternResult } from './patternFile'
